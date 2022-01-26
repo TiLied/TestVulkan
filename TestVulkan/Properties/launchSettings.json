@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "TestVulkan": {
+      "commandName": "Project",
+      "remoteDebugEnabled": false
+    }
+  }
+}
