@@ -10,7 +10,7 @@ using Silk.NET.Core.Native;
 using System.Runtime.CompilerServices;
 using System.Numerics;
 using StbImageSharp;
-using ObjParser;
+using System.Globalization;
 
 namespace TestVulkan
 {
@@ -61,6 +61,8 @@ namespace TestVulkan
 	
 	public class VulkanTutorial
 	{
+		private VulkanMemory VulkanMemoryLocal;
+
 		private Vk _vk = Vk.GetApi();
 		private KhrSurface? _vkSurface;
 		private KhrSwapchain? _vkSwapchain;
@@ -178,6 +180,7 @@ namespace TestVulkan
 
 		private Silk.NET.Vulkan.Buffer[] UniformBuffers;
 		private DeviceMemory[] UniformBuffersMemory;
+		private (VulkanMemoryChunk, VulkanMemoryItem)[] UniformBuffersChunksAndItens;
 
 		private Silk.NET.Vulkan.Semaphore[] ImageAvailableSemaphores;
 		private Silk.NET.Vulkan.Semaphore[] RenderFinishedSemaphores;
@@ -443,6 +446,14 @@ namespace TestVulkan
 				{
 					PhysicalDevice = device;
 					MsaaSamples = GetMaxUsableSampleCount();
+
+					PhysicalDeviceProperties deviceProperties;
+					_vk.GetPhysicalDeviceProperties(device, &deviceProperties);
+
+					PhysicalDeviceMemoryProperties physicalDeviceMemoryProperties;
+					_vk.GetPhysicalDeviceMemoryProperties(device, &physicalDeviceMemoryProperties);
+
+					VulkanMemoryLocal = new(deviceProperties, physicalDeviceMemoryProperties);
 					break;
 				}
 			}
@@ -621,11 +632,6 @@ namespace TestVulkan
 			{
 				CreateImageView(SwapChainImages[i], SwapChainImageFormat, ImageAspectFlags.ImageAspectColorBit, 1, ref SwapChainImageViews[i]);
 			});
-
-			//for (int i = 0; i < SwapChainImages.Length; i++)
-			//{
-			//	CreateImageView(SwapChainImages[i], SwapChainImageFormat, ImageAspectFlags.ImageAspectColorBit, 1, ref SwapChainImageViews[i]);
-			//}
 		}
 
 		unsafe private void CreateRenderPass()
@@ -785,10 +791,16 @@ namespace TestVulkan
 			VertexInputAttributeDescription[] attributeDescriptionsM = Vertex.GetAttributeDescriptions();
 			
 			VertexInputAttributeDescription* attributeDescriptions = stackalloc VertexInputAttributeDescription[attributeDescriptionsM.Length];
+
+			Parallel.For(0, attributeDescriptionsM.Length, (i) =>
+			{
+				attributeDescriptions[i] = attributeDescriptionsM[i];
+			});
+			/*
 			for (int i = 0; i < attributeDescriptionsM.Length; i++)
 			{
 				attributeDescriptions[i] = attributeDescriptionsM[i];
-			}
+			}*/
 
 			PipelineVertexInputStateCreateInfo vertexInputInfo = new();
 			vertexInputInfo.SType = StructureType.PipelineVertexInputStateCreateInfo;
@@ -955,6 +967,35 @@ namespace TestVulkan
 		{
 			SwapChainFramebuffers = new Framebuffer[SwapChainImageViews.Length];
 
+			Parallel.For(0, SwapChainImageViews.Length, (i) => 
+			{
+				ImageView* attachments = stackalloc ImageView[3];
+				attachments[0] = ColorImageView;
+				attachments[1] = DepthImageView;
+				attachments[2] = SwapChainImageViews[i];
+
+				FramebufferCreateInfo framebufferInfo = new();
+				framebufferInfo.SType = StructureType.FramebufferCreateInfo;
+				framebufferInfo.RenderPass = RenderPass;
+				framebufferInfo.AttachmentCount = 3;
+
+				framebufferInfo.PAttachments = attachments;
+
+				framebufferInfo.Width = SwapChainExtent.Width;
+				framebufferInfo.Height = SwapChainExtent.Height;
+				framebufferInfo.Layers = 1;
+
+				fixed (Framebuffer* swapChainFramebuffer = &SwapChainFramebuffers[i])
+				{
+					if (_vk.CreateFramebuffer(Device, &framebufferInfo, null, swapChainFramebuffer) != Result.Success)
+					{
+						Trace.TraceError("failed to create framebuffer!");
+						Console.ReadKey();
+						return;
+					}
+				}
+			});
+			/*
 			for (int i = 0; i < SwapChainImageViews.Length; i++)
 			{
 				ImageView* attachments = stackalloc ImageView[3];
@@ -982,7 +1023,7 @@ namespace TestVulkan
 						return;
 					}
 				}
-			}
+			}*/
 		}
 
 		unsafe private void CreateCommandPool()
@@ -1050,14 +1091,14 @@ namespace TestVulkan
 			Silk.NET.Vulkan.Buffer stagingBuffer = new();
 			DeviceMemory stagingBufferMemory = new();
 
-			CreateBuffer(imageSize, BufferUsageFlags.BufferUsageTransferSrcBit, MemoryPropertyFlags.MemoryPropertyHostVisibleBit | MemoryPropertyFlags.MemoryPropertyHostCoherentBit, ref stagingBuffer, ref stagingBufferMemory);
+			(VulkanMemoryChunk, VulkanMemoryItem) ChunkAndItem = CreateBuffer(imageSize, BufferUsageFlags.BufferUsageTransferSrcBit, MemoryPropertyFlags.MemoryPropertyHostVisibleBit | MemoryPropertyFlags.MemoryPropertyHostCoherentBit, ref stagingBuffer, ref stagingBufferMemory);
 			
 			void* data;
-			_vk.MapMemory(Device, stagingBufferMemory, 0, imageSize, 0, &data);
-
+			//_vk.MapMemory(Device, stagingBufferMemory, 0, imageSize, 0, &data);
+			_vk.MapMemory(Device, ChunkAndItem.Item1.DeviceMemory, ChunkAndItem.Item2.StartOffset, imageSize, 0, &data);
 			Marshal.Copy(image.Data, 0, (IntPtr)data, image.Data.Length);
-
-			_vk.UnmapMemory(Device, stagingBufferMemory);
+			//_vk.UnmapMemory(Device, stagingBufferMemory);
+			_vk.UnmapMemory(Device, ChunkAndItem.Item1.DeviceMemory);
 
 			MipLevels = (uint)(Math.Floor(Math.Log2(Math.Max(image.Width, image.Height)))) + 1;
 
@@ -1070,7 +1111,9 @@ namespace TestVulkan
 			//TransitionImageLayout(TextureImage, Format.R8G8B8A8Srgb, ImageLayout.TransferDstOptimal, ImageLayout.ShaderReadOnlyOptimal, MipLevels);
 
 			_vk.DestroyBuffer(Device, stagingBuffer, null);
-			_vk.FreeMemory(Device, stagingBufferMemory, null);
+			//_vk.FreeMemory(Device, stagingBufferMemory, null);
+
+			VulkanMemoryLocal.FreeOne(ref _vk, ref Device, ChunkAndItem.Item1, ChunkAndItem.Item2);
 
 			GenerateMipmaps(TextureImage, Format.R8G8B8A8Srgb, image.Width, image.Height, MipLevels);
 		}
@@ -1119,8 +1162,76 @@ namespace TestVulkan
 
 		unsafe private void LoadModel()
 		{
-			//string[] lines = File.ReadAllLines(MODEL_PATH);
-	
+			Stopwatch sw = new();
+			sw.Start();
+			Trace.WriteLine(sw.Elapsed);
+			
+			string[] lines = File.ReadAllLines(MODEL_PATH);
+
+			int offsetV = Array.FindIndex(lines, row => row.StartsWith("v "))-1;
+			int offsetT = Array.FindIndex(lines, row => row.StartsWith("vt "))-1;
+			int offsetF = Array.FindIndex(lines, row => row.StartsWith("f "));
+			int fCount = lines.Count(f => f.StartsWith("f "));
+
+			Dictionary<Vertex, uint> vertexMapTrue = new();
+
+			for (int i = 0; i < fCount; i++)
+			{
+				string[] line;
+				line = lines[i + offsetF].Split(" ");
+				if (line[0].Contains("s"))
+				{
+					offsetF++;
+					line = lines[i + offsetF].Split(" ");
+				}
+
+				foreach (string s in line) 
+				{
+					if (s.StartsWith("f"))
+						continue;
+
+					string[] el = s.Split("/");
+					int index = offsetV + int.Parse(el[0]);
+					int indexT = offsetT + int.Parse(el[1]);
+
+					string[] vertexL = lines[index].Split(" ");
+					string[] vertexTextL = lines[indexT].Split(" ");
+
+					Vertex vertex;
+
+					vertex.Pos = new Vector3()
+					{
+						X = float.Parse(vertexL[1], NumberStyles.Any, CultureInfo.InvariantCulture),
+						Y = float.Parse(vertexL[2], NumberStyles.Any, CultureInfo.InvariantCulture),
+						Z = float.Parse(vertexL[3], NumberStyles.Any, CultureInfo.InvariantCulture)
+					};
+
+					vertex.TexCoord = new Vector2
+					{
+						X = float.Parse(vertexTextL[1], NumberStyles.Any, CultureInfo.InvariantCulture),
+						Y = 1.0f - float.Parse(vertexTextL[2], NumberStyles.Any, CultureInfo.InvariantCulture)
+					};
+
+					vertex.Color = new Vector3
+					{
+						X = 1.0f,
+						Y = 1.0f,
+						Z = 1.0f
+					};
+
+					if (vertexMapTrue.TryGetValue(vertex, out var meshIndex))
+					{
+						Indices.Add(meshIndex);
+					}
+					else
+					{
+						Indices.Add((uint)Vertices.Count);
+						vertexMapTrue[vertex] = (uint)Vertices.Count;
+						Vertices.Add(vertex);
+					}
+				}
+			}
+			/*
 			Dictionary<Vertex, uint> vertexMapTrue = new();
 
 			// Initialize
@@ -1171,7 +1282,10 @@ namespace TestVulkan
 					}
 
 				}
-			}
+			}*/
+
+			sw.Stop();
+			Trace.WriteLine(sw.Elapsed);
 		}
 		
 		unsafe private void CreateVertexBuffer()
@@ -1181,22 +1295,26 @@ namespace TestVulkan
 			Silk.NET.Vulkan.Buffer stagingBuffer = new();
 			DeviceMemory stagingBufferMemory = new();
 
-			CreateBuffer(bufferSize, BufferUsageFlags.BufferUsageTransferSrcBit, MemoryPropertyFlags.MemoryPropertyHostVisibleBit | MemoryPropertyFlags.MemoryPropertyHostCoherentBit, ref stagingBuffer, ref stagingBufferMemory);
+			(VulkanMemoryChunk, VulkanMemoryItem) ChunkAndItem = CreateBuffer(bufferSize, BufferUsageFlags.BufferUsageTransferSrcBit, MemoryPropertyFlags.MemoryPropertyHostVisibleBit | MemoryPropertyFlags.MemoryPropertyHostCoherentBit, ref stagingBuffer, ref stagingBufferMemory);
 
 			void* data;
-			_vk.MapMemory(Device, stagingBufferMemory, 0, bufferSize, 0, &data);
-
+			//_vk.MapMemory(Device, stagingBufferMemory, 0, bufferSize, 0, &data);
+			_vk.MapMemory(Device, ChunkAndItem.Item1.DeviceMemory, ChunkAndItem.Item2.StartOffset, bufferSize, 0, &data);
 			//https://github.com/dfkeenan/SilkVulkanTutorial/blob/1ca065ab812475262db24dc3629dc4ed0ec7111a/Source/27_ModelLoading/Program.cs#L1306
 			Vertices.ToArray().AsSpan().CopyTo(new Span<Vertex>(data, Vertices.Count));
-			
-			_vk.UnmapMemory(Device, stagingBufferMemory);
+
+			//_vk.UnmapMemory(Device, stagingBufferMemory);
+			_vk.UnmapMemory(Device, ChunkAndItem.Item1.DeviceMemory);
 
 			CreateBuffer(bufferSize, BufferUsageFlags.BufferUsageTransferDstBit | BufferUsageFlags.BufferUsageVertexBufferBit, MemoryPropertyFlags.MemoryPropertyDeviceLocalBit, ref VertexBuffer, ref VertexBufferMemory);
 			
 			CopyBuffer(stagingBuffer, VertexBuffer, bufferSize);
 
 			_vk.DestroyBuffer(Device, stagingBuffer, null);
-			_vk.FreeMemory(Device, stagingBufferMemory, null);
+
+			//_vk.FreeMemory(Device, stagingBufferMemory, null);
+
+			VulkanMemoryLocal.FreeOne(ref _vk, ref Device, ChunkAndItem.Item1, ChunkAndItem.Item2);
 		}
 
 		unsafe private void CreateIndexBuffer()
@@ -1205,21 +1323,24 @@ namespace TestVulkan
 
 			Silk.NET.Vulkan.Buffer stagingBuffer = new();
 			DeviceMemory stagingBufferMemory = new();
-			CreateBuffer(bufferSize, BufferUsageFlags.BufferUsageTransferSrcBit, MemoryPropertyFlags.MemoryPropertyHostVisibleBit | MemoryPropertyFlags.MemoryPropertyHostCoherentBit, ref stagingBuffer, ref stagingBufferMemory);
+			(VulkanMemoryChunk, VulkanMemoryItem) ChunkAndItem = CreateBuffer(bufferSize, BufferUsageFlags.BufferUsageTransferSrcBit, MemoryPropertyFlags.MemoryPropertyHostVisibleBit | MemoryPropertyFlags.MemoryPropertyHostCoherentBit, ref stagingBuffer, ref stagingBufferMemory);
 
 			void* data;
-			_vk.MapMemory(Device, stagingBufferMemory, 0, bufferSize, 0, &data);
-
+			//_vk.MapMemory(Device, stagingBufferMemory, 0, bufferSize, 0, &data);
+			_vk.MapMemory(Device, ChunkAndItem.Item1.DeviceMemory, ChunkAndItem.Item2.StartOffset, bufferSize, 0, &data);
 			Indices.ToArray().AsSpan().CopyTo(new Span<uint>(data, Indices.Count));
 
-			_vk.UnmapMemory(Device, stagingBufferMemory);
-			
+			//_vk.UnmapMemory(Device, stagingBufferMemory);
+			_vk.UnmapMemory(Device, ChunkAndItem.Item1.DeviceMemory);
+
 			CreateBuffer(bufferSize, BufferUsageFlags.BufferUsageTransferDstBit | BufferUsageFlags.BufferUsageIndexBufferBit, MemoryPropertyFlags.MemoryPropertyDeviceLocalBit, ref IndexBuffer, ref IndexBufferMemory);
 
 			CopyBuffer(stagingBuffer, IndexBuffer, bufferSize);
 
 			_vk.DestroyBuffer(Device, stagingBuffer, null);
-			_vk.FreeMemory(Device, stagingBufferMemory, null);
+			//_vk.FreeMemory(Device, stagingBufferMemory, null);
+
+			VulkanMemoryLocal.FreeOne(ref _vk,ref Device, ChunkAndItem.Item1, ChunkAndItem.Item2);
 		}
 
 		unsafe private void CreateUniformBuffers()
@@ -1228,12 +1349,18 @@ namespace TestVulkan
 
 			UniformBuffers = new Silk.NET.Vulkan.Buffer[SwapChainImages.Length];
 			UniformBuffersMemory = new DeviceMemory[SwapChainImages.Length];
+			UniformBuffersChunksAndItens = new (VulkanMemoryChunk, VulkanMemoryItem)[SwapChainImages.Length];
 
+			//Parallel.For(0, SwapChainImages.Length, (i) => 
+			//{
+			//	UniformBuffersChunksAndItens[i] = CreateBuffer(bufferSize, BufferUsageFlags.BufferUsageUniformBufferBit, MemoryPropertyFlags.MemoryPropertyHostVisibleBit | MemoryPropertyFlags.MemoryPropertyHostCoherentBit, ref UniformBuffers[i], ref UniformBuffersMemory[i]);
+			//});
+			
 			for (int i = 0; i < SwapChainImages.Length; i++)
 			{
-				CreateBuffer(bufferSize, BufferUsageFlags.BufferUsageUniformBufferBit, MemoryPropertyFlags.MemoryPropertyHostVisibleBit | MemoryPropertyFlags.MemoryPropertyHostCoherentBit, ref UniformBuffers[i], ref UniformBuffersMemory[i]);
+				UniformBuffersChunksAndItens[i] = CreateBuffer(bufferSize, BufferUsageFlags.BufferUsageUniformBufferBit, MemoryPropertyFlags.MemoryPropertyHostVisibleBit | MemoryPropertyFlags.MemoryPropertyHostCoherentBit, ref UniformBuffers[i], ref UniformBuffersMemory[i]);
+				//CreateBuffer(bufferSize, BufferUsageFlags.BufferUsageUniformBufferBit, MemoryPropertyFlags.MemoryPropertyHostVisibleBit | MemoryPropertyFlags.MemoryPropertyHostCoherentBit, ref UniformBuffers[i], ref UniformBuffersMemory[i]);
 			}
-
 		}
 
 		unsafe private void CreateDescriptorPool()
@@ -1266,11 +1393,16 @@ namespace TestVulkan
 		{
 			DescriptorSetLayout* layouts = stackalloc DescriptorSetLayout[SwapChainImages.Length];
 
+			Parallel.For(0, SwapChainImages.Length, (i) => 
+			{
+				layouts[i] = DescriptorSetLayout;
+			});
+			/*
 			for (int i = 0; i < SwapChainImages.Length; i++)
 			{
 				layouts[i] = DescriptorSetLayout;
 			}
-
+			*/
 			DescriptorSetAllocateInfo allocInfo = new();
 			allocInfo.SType = StructureType.DescriptorSetAllocateInfo;
 			allocInfo.DescriptorPool = DescriptorPool;
@@ -1286,6 +1418,44 @@ namespace TestVulkan
 				return;
 			}
 
+			Parallel.For(0, SwapChainImages.Length, (i) => 
+			{
+				DescriptorBufferInfo bufferInfo = new();
+				bufferInfo.Buffer = UniformBuffers[i];
+				bufferInfo.Offset = 0;
+				bufferInfo.Range = (ulong)Marshal.SizeOf<UniformBufferObject>();
+
+				DescriptorImageInfo imageInfo = new();
+				imageInfo.ImageLayout = ImageLayout.ShaderReadOnlyOptimal;
+				imageInfo.ImageView = TextureImageView;
+				imageInfo.Sampler = TextureSampler;
+
+				int length = 2;
+
+				WriteDescriptorSet* descriptorWrites = stackalloc WriteDescriptorSet[length];
+				descriptorWrites[0].SType = StructureType.WriteDescriptorSet;
+				descriptorWrites[0].DstSet = DescriptorSets[i];
+				descriptorWrites[0].DstBinding = 0;
+				descriptorWrites[0].DstArrayElement = 0;
+
+				descriptorWrites[0].DescriptorType = DescriptorType.UniformBuffer;
+				descriptorWrites[0].DescriptorCount = 1;
+
+				descriptorWrites[0].PBufferInfo = &bufferInfo;
+
+				descriptorWrites[1].SType = StructureType.WriteDescriptorSet;
+				descriptorWrites[1].DstSet = DescriptorSets[i];
+				descriptorWrites[1].DstBinding = 1;
+				descriptorWrites[1].DstArrayElement = 0;
+
+				descriptorWrites[1].DescriptorType = DescriptorType.CombinedImageSampler;
+				descriptorWrites[1].DescriptorCount = 1;
+
+				descriptorWrites[1].PImageInfo = &imageInfo;
+
+				_vk.UpdateDescriptorSets(Device, (uint)length, descriptorWrites, 0, null);
+			});
+			/*
 			for (int i = 0; i < SwapChainImages.Length; i++)
 			{
 				DescriptorBufferInfo bufferInfo = new();
@@ -1322,7 +1492,7 @@ namespace TestVulkan
 				descriptorWrites[1].PImageInfo = &imageInfo;
 
 				_vk.UpdateDescriptorSets(Device, (uint)length, descriptorWrites, 0, null);
-			}
+			}*/
 
 		}
 
@@ -1515,7 +1685,7 @@ namespace TestVulkan
 				_vk.BindImageMemory(Device, image, ColorImageMemory, 17694720+ 17694720);
 			}
 			*/
-			
+			/*
 			MemoryAllocateInfo allocInfo = new();
 			allocInfo.SType = StructureType.MemoryAllocateInfo;
 			allocInfo.AllocationSize = memRequirements.Size;
@@ -1531,7 +1701,9 @@ namespace TestVulkan
 				}
 
 			}
-			_vk.BindImageMemory(Device, image, imageMemory, 0);
+			_vk.BindImageMemory(Device, image, imageMemory, 0);*/
+
+			VulkanMemoryLocal.BindImage(ref _vk,ref Device,ref image, properties);
 		}
 
 		unsafe private void CreateImageView(Image image, Format format, ImageAspectFlags aspectFlags, uint mipLevels, ref ImageView imageView )
@@ -1558,7 +1730,7 @@ namespace TestVulkan
 			}
 		}
 
-		unsafe private void CreateBuffer(ulong size, BufferUsageFlags usage, MemoryPropertyFlags properties, ref Silk.NET.Vulkan.Buffer buffer, ref DeviceMemory bufferMemory)
+		unsafe private (VulkanMemoryChunk, VulkanMemoryItem) CreateBuffer(ulong size, BufferUsageFlags usage, MemoryPropertyFlags properties, ref Silk.NET.Vulkan.Buffer buffer, ref DeviceMemory bufferMemory)
 		{
 			BufferCreateInfo bufferInfo = new();
 			bufferInfo.SType = StructureType.BufferCreateInfo;
@@ -1575,10 +1747,10 @@ namespace TestVulkan
 				{
 					Trace.TraceError("failed to create vertex buffer!");
 					Console.ReadKey();
-					return;
 				}
 			}
 
+			/*
 			MemoryRequirements memRequirements;
 			_vk.GetBufferMemoryRequirements(Device, buffer, &memRequirements);
 
@@ -1598,6 +1770,9 @@ namespace TestVulkan
 			}
 
 			_vk.BindBufferMemory(Device, buffer, bufferMemory, 0);
+			*/
+			(VulkanMemoryChunk, VulkanMemoryItem) ChunkAndItem = VulkanMemoryLocal.BindBuffer(ref _vk, ref Device, ref buffer, properties);
+			return ChunkAndItem;
 		}
 
 		unsafe private void CopyBuffer(Silk.NET.Vulkan.Buffer srcBuffer, Silk.NET.Vulkan.Buffer dstBuffer, ulong size)
@@ -1882,6 +2057,7 @@ namespace TestVulkan
 			_vk.GetPhysicalDeviceMemoryProperties(PhysicalDevice, &memProperties);
 
 			//https://github.com/jcant0n/VulkanSharp_Tutorials/blob/86f289c3cf547de7e08c6a4e1200f01cf21ca2d8/VKVertexBuffers/VulkanRenderer.cs#L678
+
 			for (int i = 0; i < memProperties.MemoryTypeCount; ++i)
 			{
 				uint v = (uint)(typeFilter & (1 << i));
@@ -2025,8 +2201,8 @@ namespace TestVulkan
 			PhysicalDeviceFeatures deviceFeatures;
 			_vk.GetPhysicalDeviceFeatures(device, &deviceFeatures);
 
-			PhysicalDeviceMemoryProperties physicalDeviceMemoryProperties;
-			_vk.GetPhysicalDeviceMemoryProperties(device, &physicalDeviceMemoryProperties);
+			//PhysicalDeviceMemoryProperties physicalDeviceMemoryProperties;
+			//_vk.GetPhysicalDeviceMemoryProperties(device, &physicalDeviceMemoryProperties);
 
 			QueueFamilyIndices indices = FindQueueFamilies(device);
 
@@ -2362,11 +2538,11 @@ namespace TestVulkan
 			ulong bufferSize = (ulong)Marshal.SizeOf<UniformBufferObject>();
 			void* data;
 
-			_vk.MapMemory(Device, UniformBuffersMemory[currentImage], 0, bufferSize, 0, &data);
+			_vk.MapMemory(Device, UniformBuffersChunksAndItens[currentImage].Item1.DeviceMemory, UniformBuffersChunksAndItens[currentImage].Item2.StartOffset, bufferSize, 0, &data);
 
 			Marshal.StructureToPtr(ubo, (IntPtr)data, false);
 
-			_vk.UnmapMemory(Device, UniformBuffersMemory[currentImage]);
+			_vk.UnmapMemory(Device, UniformBuffersChunksAndItens[currentImage].Item1.DeviceMemory);
 		}
 
 		unsafe private void Cleanup()
@@ -2388,12 +2564,21 @@ namespace TestVulkan
 			_vk.DestroyBuffer(Device, VertexBuffer, null);
 			_vk.FreeMemory(Device, VertexBufferMemory, null);
 
+			VulkanMemoryLocal.FreeAll(ref _vk,ref Device);
+
+			Parallel.For(0, MAX_FRAMES_IN_FLIGHT, (i) => 
+			{
+				_vk.DestroySemaphore(Device, RenderFinishedSemaphores[i], null);
+				_vk.DestroySemaphore(Device, ImageAvailableSemaphores[i], null);
+				_vk.DestroyFence(Device, InFlightFences[i], null);
+			});
+			/*
 			for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 			{
 				_vk.DestroySemaphore(Device, RenderFinishedSemaphores[i], null);
 				_vk.DestroySemaphore(Device, ImageAvailableSemaphores[i], null);
 				_vk.DestroyFence(Device, InFlightFences[i], null);
-			}
+			}*/
 
 			_vk.DestroyCommandPool(Device, CommandPool, null);
 			_vk.DestroyCommandPool(Device, CommandPoolSecond, null);
@@ -2444,11 +2629,17 @@ namespace TestVulkan
 
 			_vkSwapchain?.DestroySwapchain(Device, SwapChain, null);
 
+			Parallel.For(0, SwapChainImages.Length, (i) => 
+			{
+				_vk.DestroyBuffer(Device, UniformBuffers[i], null);
+				_vk.FreeMemory(Device, UniformBuffersMemory[i], null);
+			});
+			/*
 			for (int i = 0; i < SwapChainImages.Length; i++)
 			{
 				_vk.DestroyBuffer(Device, UniformBuffers[i], null);
 				_vk.FreeMemory(Device, UniformBuffersMemory[i], null);
-			}
+			}*/
 
 			_vk.DestroyDescriptorPool(Device, DescriptorPool, null);
 		}
