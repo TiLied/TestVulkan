@@ -1,4 +1,5 @@
-﻿using Silk.NET.Vulkan;
+﻿/*
+using Silk.NET.Vulkan;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 
@@ -304,4 +305,4 @@ namespace TestVulkan
 
 		public bool IsFreed { get; set; } = false;
 	}
-}
+}*/
