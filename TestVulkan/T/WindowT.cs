@@ -1,19 +1,20 @@
-﻿using SDL2;
+﻿using Evergine.Bindings.Vulkan;
+using SDL2;
 using System;
 using System.Diagnostics;
 
 namespace TestVulkan
 {
-	public class LiveWindowT
+	public class WindowT
 	{
-		private IntPtr Window;
+		public IntPtr Window;
 
 		private int Width;
 		private int Height;
 
 		private string WindowName;
 
-		public LiveWindowT(int w, int h, string n)
+		public WindowT(int w, int h, string n)
 		{
 			Width = w;
 			Height = h;
@@ -37,6 +38,30 @@ namespace TestVulkan
 
 			Window = SDL.SDL_CreateWindow(WindowName, SDL.SDL_WINDOWPOS_CENTERED, SDL.SDL_WINDOWPOS_CENTERED, Width, Height, SDL.SDL_WindowFlags.SDL_WINDOW_SHOWN | SDL.SDL_WindowFlags.SDL_WINDOW_VULKAN);
 
+		}
+
+		unsafe public void CreateWindowSurface(VkInstance instance, out VkSurfaceKHR surface) 
+		{
+			ulong _handle;
+
+			if (SDL.SDL_Vulkan_CreateSurface(Window, instance.Handle, out _handle) == SDL.SDL_bool.SDL_FALSE)
+			{
+				Trace.TraceError("Failed to create window surface!: " + SDL.SDL_GetError());
+				throw new Exception(SDL.SDL_GetError());
+			}
+
+			surface = new VkSurfaceKHR(_handle);
+		}
+
+		public VkExtent2D GetExtent()
+		{
+			VkExtent2D vkExtent2D = new VkExtent2D() 
+			{ 
+				height = (uint)Height,
+				width = (uint)Width
+			};
+
+			return vkExtent2D;
 		}
 
 		public void DestroyWindow() 

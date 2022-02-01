@@ -38,12 +38,10 @@ namespace TestVulkan
 
 			Trace.WriteLine(Directory);
 
-			VulkanTutorial v = new();
-
+			//VulkanTutorial v = new();
 			//v.Run();
 
 			FirstAppT v2 = new();
-
 			v2.Run();
 
 			Console.ReadKey();

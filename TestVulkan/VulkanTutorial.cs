@@ -2080,7 +2080,7 @@ namespace TestVulkan
 		
 		unsafe private ShaderModule CreateShaderModule(byte[] code)
 		{
-			ShaderModuleCreateInfo createInfo;
+			ShaderModuleCreateInfo createInfo = new();
 			createInfo.SType = StructureType.ShaderModuleCreateInfo;
 			createInfo.CodeSize = (nuint)code.Length;
 
@@ -2092,7 +2092,8 @@ namespace TestVulkan
 
 			ShaderModule shaderModule;
 
-			if (_vk.CreateShaderModule(Device, &createInfo, null, &shaderModule) != Result.Success)
+			//test in and out
+			if (_vk.CreateShaderModule(Device, in createInfo, null, out shaderModule) != Result.Success)
 			{
 				Trace.TraceError("failed to create shader module!");
 				Console.ReadKey();
