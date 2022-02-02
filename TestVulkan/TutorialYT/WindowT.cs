@@ -37,7 +37,9 @@ namespace TestVulkan
 			Trace.WriteLine($"But we are linking against SDL version: {linked.major}.{linked.minor}.{linked.patch}");
 
 			Window = SDL.SDL_CreateWindow(WindowName, SDL.SDL_WINDOWPOS_CENTERED, SDL.SDL_WINDOWPOS_CENTERED, Width, Height, SDL.SDL_WindowFlags.SDL_WINDOW_SHOWN | SDL.SDL_WindowFlags.SDL_WINDOW_VULKAN);
-
+			
+			SDL.SDL_SetWindowResizable(Window, SDL.SDL_bool.SDL_TRUE);
+			
 		}
 
 		unsafe public void CreateWindowSurface(VkInstance instance, out VkSurfaceKHR surface) 
@@ -55,7 +57,7 @@ namespace TestVulkan
 
 		public VkExtent2D GetExtent()
 		{
-			VkExtent2D vkExtent2D = new VkExtent2D() 
+			VkExtent2D vkExtent2D = new() 
 			{ 
 				height = (uint)Height,
 				width = (uint)Width

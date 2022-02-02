@@ -2,7 +2,8 @@
   "profiles": {
     "TestVulkan": {
       "commandName": "Project",
-      "remoteDebugEnabled": false
+      "remoteDebugEnabled": false,
+      "nativeDebugging": true
     }
   }
 }

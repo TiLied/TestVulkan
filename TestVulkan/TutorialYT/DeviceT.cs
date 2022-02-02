@@ -29,21 +29,21 @@ namespace TestVulkan
 	{
 
 #if Debug
-		public const bool EnableValidationLayers = false;
+		private const bool EnableValidationLayers = false;
 #else
-		public const bool EnableValidationLayers = true;
+		private const bool EnableValidationLayers = true;
 #endif
 
 		private VkInstance Instance;
 		private VkDebugUtilsMessengerEXT DebugMessenger;
-		public VkPhysicalDevice PhysicalDevice = VkPhysicalDevice.Null;
+		public VkPhysicalDevice PhysicalDevice { get; set; } = VkPhysicalDevice.Null;
 		private WindowT Window;
-		private VkCommandPool CommandPool;
+		public VkCommandPool CommandPool;
 
 		public VkDevice Device;
-		public VkSurfaceKHR Surface;
-		private VkQueue GraphicsQueue;
-		private VkQueue PresentQueue;
+		public VkSurfaceKHR Surface { get; set; }
+		public VkQueue GraphicsQueue;
+		public VkQueue PresentQueue;
 
 		private string[] ValidationLayers = { "VK_LAYER_KHRONOS_validation" };
 		private string[] DeviceExtensions = { "VK_KHR_swapchain" };
@@ -192,7 +192,9 @@ namespace TestVulkan
 
 		unsafe private void CreateSurface() 
 		{
-			Window.CreateWindowSurface(Instance, out Surface);
+			VkSurfaceKHR surface;
+			Window.CreateWindowSurface(Instance, out surface);
+			Surface = surface;
 		}
 
 		unsafe private void PickPhysicalDevice() 
@@ -506,6 +508,42 @@ namespace TestVulkan
 			}
 
 			throw new Exception("failed to find suitable memory type!");
+		}
+
+		unsafe public void CreateBuffer(ulong size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, ref VkBuffer buffer, ref VkDeviceMemory bufferMemory)
+		{
+			VkBufferCreateInfo bufferInfo = new();
+			bufferInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+			bufferInfo.size = size;
+			bufferInfo.usage = usage;
+			bufferInfo.sharingMode = VkSharingMode.VK_SHARING_MODE_EXCLUSIVE;
+
+			fixed (VkBuffer* bufferL = &buffer)
+			{
+				if (VulkanNative.vkCreateBuffer(Device, &bufferInfo, null, bufferL) != VkResult.VK_SUCCESS)
+				{
+					throw new Exception("failed to create vertex buffer!");
+				}
+			}
+			
+
+			VkMemoryRequirements memRequirements;
+			VulkanNative.vkGetBufferMemoryRequirements(Device, buffer, &memRequirements);
+
+			VkMemoryAllocateInfo allocInfo = new();
+			allocInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			allocInfo.allocationSize = memRequirements.size;
+			allocInfo.memoryTypeIndex = FindMemoryType(memRequirements.memoryTypeBits, properties);
+
+			fixed (VkDeviceMemory* bufferMemoryL = &bufferMemory)
+			{
+				if (VulkanNative.vkAllocateMemory(Device, &allocInfo, null, bufferMemoryL) != VkResult.VK_SUCCESS)
+				{
+					throw new Exception("failed to allocate vertex buffer memory!");
+				}
+			}
+
+			VulkanNative.vkBindBufferMemory(Device, buffer, bufferMemory, 0);
 		}
 
 		//debug

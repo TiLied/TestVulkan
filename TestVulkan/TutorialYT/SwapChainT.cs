@@ -11,12 +11,14 @@ namespace TestVulkan
 		private DeviceT Device;
 		private VkExtent2D WindowExtent;
 
-		private VkSwapchainKHR SwapChain;
-		private VkImage[] SwapChainImages;
+		public VkSwapchainKHR SwapChain;
+		private SwapChainT OldSwapChain;
+
+		public VkImage[] SwapChainImages;
 		private VkFormat SwapChainImageFormat;
 		public VkExtent2D SwapChainExtent;
 		private VkImageView[] SwapChainImageViews;
-		private VkFramebuffer[] SwapChainFramebuffers;
+		public VkFramebuffer[] SwapChainFramebuffers;
 
 		public VkRenderPass RenderPass;
 
@@ -29,18 +31,132 @@ namespace TestVulkan
 		private VkFence[] InFlightFences;
 		private VkFence[] ImagesInFlight;
 
-		private int currentFrame = 0;
+		private int CurrentFrame = 0;
 		public SwapChainT(ref DeviceT deviceRef, VkExtent2D windowExtent)
 		{
 			Device = deviceRef;
 			WindowExtent = windowExtent;
 
+			Init();
+		}
+
+		public SwapChainT(ref DeviceT deviceRef, VkExtent2D windowExtent, ref SwapChainT previos)
+		{
+			Device = deviceRef;
+			WindowExtent = windowExtent;
+			OldSwapChain = previos;
+
+			Init();
+
+			OldSwapChain.DestroySwapChain();
+			OldSwapChain = null;
+		}
+
+		private void Init() 
+		{
 			CreateSwapChain();
 			CreateImageViews();
 			CreateRenderPass();
 			CreateDepthResources();
 			CreateFramebuffers();
 			CreateSyncObjects();
+		}
+
+		unsafe public VkResult AcquireNextImage(ref uint imageIndex)
+		{
+			fixed (VkFence* InFlightFence = &InFlightFences[CurrentFrame])
+			{
+				VulkanNative.vkWaitForFences(
+								Device.Device,
+								1,
+								InFlightFence,
+								true,
+								uint.MaxValue);
+			}
+
+			VkResult result;
+
+			fixed (uint* imageIndexL = &imageIndex)
+			{
+				result = VulkanNative.vkAcquireNextImageKHR(
+								Device.Device,
+								SwapChain,
+								uint.MaxValue,
+								ImageAvailableSemaphores[CurrentFrame],  // must be a not signaled semaphore
+								VkFence.Null,
+								imageIndexL);
+			}
+			
+			return result;
+		}
+
+		unsafe public VkResult SubmitCommandBuffers(ref VkCommandBuffer buffers, ref uint imageIndex) 
+		{
+			if (ImagesInFlight[imageIndex].Handle != 0)
+			{
+				fixed (VkFence* imagesInFlight = &ImagesInFlight[imageIndex])
+				{
+					VulkanNative.vkWaitForFences(Device.Device, 1, imagesInFlight, true, uint.MaxValue);
+				}
+			}
+			ImagesInFlight[imageIndex] = InFlightFences[CurrentFrame];
+
+			VkSubmitInfo submitInfo = new();
+			submitInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+			VkSemaphore* waitSemaphores = stackalloc VkSemaphore[1];
+			waitSemaphores[0] = ImageAvailableSemaphores[CurrentFrame];
+
+			VkPipelineStageFlags* waitStages = stackalloc VkPipelineStageFlags[1];
+			waitStages[0] = VkPipelineStageFlags.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+			submitInfo.waitSemaphoreCount = 1;
+			submitInfo.pWaitSemaphores = waitSemaphores;
+			submitInfo.pWaitDstStageMask = waitStages;
+
+			submitInfo.commandBufferCount = 1;
+			fixed (VkCommandBuffer* buffer = &buffers)
+			{
+				submitInfo.pCommandBuffers = buffer;
+			}
+
+			VkSemaphore* signalSemaphores = stackalloc VkSemaphore[1];
+			signalSemaphores[0] = RenderFinishedSemaphores[CurrentFrame];
+
+			submitInfo.signalSemaphoreCount = 1;
+			submitInfo.pSignalSemaphores = signalSemaphores;
+
+			fixed (VkFence* inFlightFence = &InFlightFences[CurrentFrame])
+			{
+				VulkanNative.vkResetFences(Device.Device, 1, inFlightFence);
+				if (VulkanNative.vkQueueSubmit(Device.GraphicsQueue, 1, &submitInfo, InFlightFences[CurrentFrame]) != VkResult.VK_SUCCESS)
+				{
+					throw new Exception("failed to submit draw command buffer!");
+				}
+			}
+
+			VkPresentInfoKHR presentInfo = new();
+			presentInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+
+			presentInfo.waitSemaphoreCount = 1;
+			presentInfo.pWaitSemaphores = signalSemaphores;
+
+			VkSwapchainKHR* swapChains = stackalloc VkSwapchainKHR[1];
+			swapChains[0] = SwapChain;
+
+			presentInfo.swapchainCount = 1;
+			presentInfo.pSwapchains = swapChains;
+
+			fixed (uint* imageIndexL = &imageIndex)
+			{
+				presentInfo.pImageIndices = imageIndexL;
+			}
+
+			VkResult result = VulkanNative.vkQueuePresentKHR(Device.PresentQueue, &presentInfo);
+
+			CurrentFrame = (CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+
+			return result;
 		}
 
 		unsafe private void CreateSwapChain() 
@@ -94,7 +210,10 @@ namespace TestVulkan
 			createInfo.presentMode = presentMode;
 			createInfo.clipped = true;
 
-			createInfo.oldSwapchain = VkSwapchainKHR.Null;
+			if(OldSwapChain == null)
+				createInfo.oldSwapchain = VkSwapchainKHR.Null;
+			else
+				createInfo.oldSwapchain = OldSwapChain.SwapChain;
 
 			fixed (VkSwapchainKHR* swapChain = &SwapChain)
 			{
@@ -125,7 +244,7 @@ namespace TestVulkan
 			foreach (VkSurfaceFormatKHR availableFormat in availableFormats)
 			{
 				Trace.WriteLine($"Available Swap Surface Format: {availableFormat.format}");
-				if (availableFormat.format == VkFormat.VK_FORMAT_B8G8R8A8_UNORM && availableFormat.colorSpace == VkColorSpaceKHR.VK_COLORSPACE_SRGB_NONLINEAR_KHR)
+				if (availableFormat.format == VkFormat.VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VkColorSpaceKHR.VK_COLORSPACE_SRGB_NONLINEAR_KHR)
 					returnFormat = availableFormat;
 			}
 
@@ -395,6 +514,38 @@ namespace TestVulkan
 
 					}
 				}
+			}
+		}
+
+		unsafe public void DestroySwapChain() 
+		{
+			foreach (VkImageView imageView in SwapChainImageViews)
+			{
+				VulkanNative.vkDestroyImageView(Device.Device, imageView, null);
+			}
+
+			VulkanNative.vkDestroySwapchainKHR(Device.Device, SwapChain, null);
+
+			for (int i = 0; i < DepthImages.Length; i++)
+			{
+				VulkanNative.vkDestroyImageView(Device.Device, DepthImageViews[i], null);
+				VulkanNative.vkDestroyImage(Device.Device, DepthImages[i], null);
+				VulkanNative.vkFreeMemory(Device.Device, DepthImageMemorys[i], null);
+			}
+
+			foreach (VkFramebuffer framebuffer in SwapChainFramebuffers)
+			{
+				VulkanNative.vkDestroyFramebuffer(Device.Device, framebuffer, null);
+			}
+
+			VulkanNative.vkDestroyRenderPass(Device.Device, RenderPass, null);
+
+			// cleanup synchronization objects
+			for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+			{
+				VulkanNative.vkDestroySemaphore(Device.Device, RenderFinishedSemaphores[i], null);
+				VulkanNative.vkDestroySemaphore(Device.Device, ImageAvailableSemaphores[i], null);
+				VulkanNative.vkDestroyFence(Device.Device, InFlightFences[i], null);
 			}
 		}
 
