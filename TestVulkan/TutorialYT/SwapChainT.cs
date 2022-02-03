@@ -6,7 +6,7 @@ namespace TestVulkan
 {
 	public class SwapChainT
 	{
-		private static readonly int MAX_FRAMES_IN_FLIGHT = 2;
+		public static readonly int MAX_FRAMES_IN_FLIGHT = 2;
 
 		private DeviceT Device;
 		private VkExtent2D WindowExtent;
@@ -15,7 +15,14 @@ namespace TestVulkan
 		private SwapChainT OldSwapChain;
 
 		public VkImage[] SwapChainImages;
+
 		private VkFormat SwapChainImageFormat;
+		private VkFormat SwapChainDepthFormat;
+
+		public bool CompareSwapChainFormats(SwapChainT swapChain) => 
+			swapChain.SwapChainDepthFormat == SwapChainDepthFormat && 
+			swapChain.SwapChainImageFormat == SwapChainImageFormat;
+
 		public VkExtent2D SwapChainExtent;
 		private VkImageView[] SwapChainImageViews;
 		public VkFramebuffer[] SwapChainFramebuffers;
@@ -353,11 +360,11 @@ namespace TestVulkan
 			VkSubpassDependency dependency = new();
 
 			dependency.dstSubpass = 0;
-			dependency.dstAccessMask = VkAccessFlags.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-			dependency.dstStageMask = VkPipelineStageFlags.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			dependency.dstAccessMask = VkAccessFlags.VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VkAccessFlags.VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			dependency.dstStageMask = VkPipelineStageFlags.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VkPipelineStageFlags.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 			dependency.srcSubpass = VulkanNative.VK_SUBPASS_EXTERNAL;
 			dependency.srcAccessMask = 0;
-			dependency.srcStageMask = VkPipelineStageFlags.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			dependency.srcStageMask = VkPipelineStageFlags.VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VkPipelineStageFlags.VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 
 			VkAttachmentDescription* attachments = stackalloc VkAttachmentDescription[2];
 			attachments[0] = colorAttachment;
@@ -395,6 +402,7 @@ namespace TestVulkan
 		unsafe private void CreateDepthResources() 
 		{
 			VkFormat depthFormat = FindDepthFormat();
+			SwapChainDepthFormat = depthFormat;
 			VkExtent2D swapChainExtent = SwapChainExtent;
 
 			DepthImages = new VkImage[SwapChainImages.Length];
