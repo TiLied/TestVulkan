@@ -2625,6 +2625,9 @@ namespace TestVulkan
 
 		unsafe private void CleanupSwapChain()
 		{
+			//TODO FREE MEMORY!
+			//
+			
 			_vk.DestroyImageView(Device, ColorImageView, null);
 			_vk.DestroyImage(Device, ColorImage, null);
 			_vk.FreeMemory(Device, ColorImageMemory, null);

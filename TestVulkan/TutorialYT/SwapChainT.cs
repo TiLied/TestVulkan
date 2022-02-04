@@ -39,6 +39,7 @@ namespace TestVulkan
 		private VkFence[] ImagesInFlight;
 
 		private int CurrentFrame = 0;
+
 		public SwapChainT(ref DeviceT deviceRef, VkExtent2D windowExtent)
 		{
 			Device = deviceRef;
@@ -67,6 +68,11 @@ namespace TestVulkan
 			CreateDepthResources();
 			CreateFramebuffers();
 			CreateSyncObjects();
+		}
+
+		public float ExtentAspectRatio()
+		{
+			return (float)SwapChainExtent.width / (float)SwapChainExtent.height;
 		}
 
 		unsafe public VkResult AcquireNextImage(ref uint imageIndex)
@@ -262,14 +268,15 @@ namespace TestVulkan
 
 		private VkPresentModeKHR ChooseSwapPresentMode(VkPresentModeKHR[] availablePresentModes)
 		{
-			VkPresentModeKHR returnPresentMode = VkPresentModeKHR.VK_PRESENT_MODE_MAILBOX_KHR;
+			VkPresentModeKHR returnPresentMode = VkPresentModeKHR.VK_PRESENT_MODE_FIFO_KHR;
+			/*
 			foreach (VkPresentModeKHR availablePresentMode in availablePresentModes)
 			{
 				Trace.WriteLine($"Available Swap Present Mode: {availablePresentMode}");
 				if (availablePresentMode == VkPresentModeKHR.VK_PRESENT_MODE_MAILBOX_KHR)
 					returnPresentMode = availablePresentMode;
 			}
-
+			*/
 			Trace.WriteLine($"Return Present Mode: {returnPresentMode}");
 
 			return returnPresentMode;

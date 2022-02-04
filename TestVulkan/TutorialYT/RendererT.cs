@@ -19,6 +19,8 @@ namespace TestVulkan
 		public VkCommandBuffer GetCurrentCommandBuffer => CommandBuffers[CurrentFrameIndex];
 		public VkRenderPass GetSwapchainRenderPass => SwapChain.RenderPass;
 
+		public float GetAspectRatio => SwapChain.ExtentAspectRatio();
+
 		public int GetFrameIndex => CurrentFrameIndex;
 		public RendererT(ref WindowT window, ref DeviceT device)
 		{
@@ -132,14 +134,7 @@ namespace TestVulkan
 			if (result == VkResult.VK_ERROR_OUT_OF_DATE_KHR || result == VkResult.VK_SUBOPTIMAL_KHR)
 			{
 				RecreateSwapChain();
-
-				//Delete IsFrameStarted! and CurrentFrameIndex!!
-				CurrentFrameIndex = (CurrentFrameIndex + 1) % SwapChainT.MAX_FRAMES_IN_FLIGHT;
-				IsFrameStarted = false;
-				return;
-			}
-
-			if (result != VkResult.VK_SUCCESS)
+			}else if (result != VkResult.VK_SUCCESS)
 				throw new Exception("Fail to present");
 
 			IsFrameStarted = false;

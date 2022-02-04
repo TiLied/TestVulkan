@@ -7,7 +7,7 @@ namespace TestVulkan
 {
 	public struct VertexT 
 	{
-		public Vector2 Position;
+		public Vector3 Position;
 		public Vector3 Color;
 
 		static public VkVertexInputBindingDescription[] GetBindingDescriptions() 
@@ -27,7 +27,7 @@ namespace TestVulkan
 
 			attributeDescriptions[0].binding = 0;
 			attributeDescriptions[0].location = 0;
-			attributeDescriptions[0].format = VkFormat.VK_FORMAT_R32G32_SFLOAT;
+			attributeDescriptions[0].format = VkFormat.VK_FORMAT_R32G32B32_SFLOAT;
 			attributeDescriptions[0].offset = (uint)Marshal.OffsetOf<VertexT>(nameof(Position));
 
 			attributeDescriptions[1].binding = 0;

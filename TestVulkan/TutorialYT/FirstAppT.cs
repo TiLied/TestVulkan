@@ -7,18 +7,6 @@ using System.Runtime.InteropServices;
 
 namespace TestVulkan
 {
-	[StructLayout(LayoutKind.Explicit)]
-	public struct SimplePushConstantData 
-	{
-		[FieldOffset(0)]
-		public Matrix4x4 Transform = Matrix4x4.Identity;
-		[FieldOffset(64)]
-		public Vector2 Offset;
-		[FieldOffset(64+16)]
-		public Vector3 Color;
-
-	}
-
 	public class FirstAppT
 	{
 		private const int WIDTH = 960;
@@ -43,6 +31,9 @@ namespace TestVulkan
 		public void Run() 
 		{
 			SimpleRenderSystemT simpleRenderSystem = new(ref Device, Renderer.GetSwapchainRenderPass);
+			CameraT camera = new();
+			//camera.SetViewDirection(Vector3.Zero, new Vector3(0.5f, 0.0f, 1.0f), null);
+			camera.SetViewTarget(new Vector3(-1.0f, -2.0f, 2.0f), new Vector3(0.0f, 0.0f, 2.5f), null);
 
 			bool run = true;
 			while (run)
@@ -90,12 +81,17 @@ namespace TestVulkan
 					}
 				}
 
+				float aspect = Renderer.GetAspectRatio;
+				//camera.SetOrthographicProjection(-aspect, aspect, -1.0f, 1.0f, -1.0f, 1.0f);
+				//
+				camera.SetPerspectiveProjection((MathF.PI * 5)/18, aspect, 0.1f, 10.0f);
+				
 				VkCommandBuffer? commandBuffer = Renderer.BeginFrame();
 				if (commandBuffer != null)
 				{
 					VkCommandBuffer cB = (VkCommandBuffer)commandBuffer;
 					Renderer.BeginSwapChainRenderPass(cB);
-					simpleRenderSystem.RenderGameObjects(cB, ref GameObjects);
+					simpleRenderSystem.RenderGameObjects(cB, ref GameObjects, ref camera);
 					Renderer.EndSwapChainRenderPass(cB);
 					Renderer.EndFrame();
 				}
@@ -105,7 +101,7 @@ namespace TestVulkan
 			simpleRenderSystem.DestroySRS();
 			Destroy();
 		}
-
+		/*
 		private void Sierpinski(ref List<VertexT> vertices, int depth, Vector2 left, Vector2 right, Vector2 top)
 		{
 			if (depth <= 0)
@@ -123,42 +119,223 @@ namespace TestVulkan
 				Sierpinski(ref vertices, depth - 1, leftRight, right, rightTop);
 				Sierpinski(ref vertices, depth - 1, leftTop, rightTop, top);
 			}
+		}*/
+
+		private ModelT CreateCubeModel(ref DeviceT device , Vector3 offset)
+		{
+			List<VertexT> vertices = new()
+			{
+				// left face (white)
+				new VertexT() 
+				{ 
+					Position = new Vector3(-0.5f, -0.5f, -0.5f),
+					Color = new Vector3(0.9f, 0.9f, 0.9f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(-0.5f, 0.5f, 0.5f),
+					Color = new Vector3(0.9f, 0.9f, 0.9f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(-0.5f, -0.5f, 0.5f),
+					Color = new Vector3(0.9f, 0.9f, 0.9f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(-0.5f, -0.5f, -0.5f),
+					Color = new Vector3(0.9f, 0.9f, 0.9f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(-0.5f, 0.5f, -0.5f),
+					Color = new Vector3(0.9f, 0.9f, 0.9f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(-0.5f, 0.5f, 0.5f),
+					Color = new Vector3(0.9f, 0.9f, 0.9f)
+				},
+				// right face (yellow)
+				new VertexT()
+				{
+					Position = new Vector3(0.5f, -0.5f, -0.5f),
+					Color = new Vector3(0.8f, 0.8f, 0.1f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(0.5f, 0.5f, 0.5f),
+					Color = new Vector3(0.8f, 0.8f, 0.1f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(0.5f, -0.5f, 0.5f),
+					Color = new Vector3(0.8f, 0.8f, 0.1f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(0.5f, -0.5f, -0.5f),
+					Color = new Vector3(0.8f, 0.8f, 0.1f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(0.5f, 0.5f, -0.5f),
+					Color = new Vector3(0.8f, 0.8f, 0.1f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(0.5f, 0.5f, 0.5f),
+					Color = new Vector3(0.8f, 0.8f, 0.1f)
+				},
+				// top face (orange, remember y axis points down)
+				new VertexT()
+				{
+					Position = new Vector3(-0.5f, -0.5f, -0.5f),
+					Color = new Vector3(0.9f, 0.6f, 0.1f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(0.5f, -0.5f, 0.5f),
+					Color = new Vector3(0.9f, 0.6f, 0.1f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(-0.5f, -0.5f, 0.5f),
+					Color = new Vector3(0.9f, 0.6f, 0.1f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(-0.5f, -0.5f, -0.5f),
+					Color = new Vector3(0.9f, 0.6f, 0.1f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(0.5f, -0.5f, -0.5f),
+					Color = new Vector3(0.9f, 0.6f, 0.1f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(0.5f, -0.5f, 0.5f),
+					Color = new Vector3(0.9f, 0.6f, 0.1f)
+				},
+				// bottom face (red)
+				new VertexT()
+				{
+					Position = new Vector3(-0.5f, 0.5f, -0.5f),
+					Color = new Vector3(0.8f, 0.1f, 0.1f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(0.5f, 0.5f, 0.5f),
+					Color = new Vector3(0.8f, 0.1f, 0.1f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(-0.5f, 0.5f, 0.5f),
+					Color = new Vector3(0.8f, 0.1f, 0.1f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(-0.5f, 0.5f, -0.5f),
+					Color = new Vector3(0.8f, 0.1f, 0.1f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(0.5f, 0.5f, -0.5f),
+					Color = new Vector3(0.8f, 0.1f, 0.1f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(0.5f, 0.5f, 0.5f),
+					Color = new Vector3(0.8f, 0.1f, 0.1f)
+				},
+				// nose face (blue)
+				new VertexT()
+				{
+					Position = new Vector3(-0.5f, -0.5f, 0.5f),
+					Color = new Vector3(0.1f, 0.1f, 0.8f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(0.5f, 0.5f, 0.5f),
+					Color = new Vector3(0.1f, 0.1f, 0.8f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(-0.5f, 0.5f, 0.5f),
+					Color = new Vector3(0.1f, 0.1f, 0.8f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(-0.5f, -0.5f, 0.5f),
+					Color = new Vector3(0.1f, 0.1f, 0.8f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(0.5f, -0.5f, 0.5f),
+					Color = new Vector3(0.1f, 0.1f, 0.8f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(0.5f, 0.5f, 0.5f),
+					Color = new Vector3(0.1f, 0.1f, 0.8f)
+				},
+				// tail face (green)
+				new VertexT()
+				{
+					Position = new Vector3(-0.5f, -0.5f, -0.5f),
+					Color = new Vector3(0.1f, 0.8f, 0.1f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(0.5f, 0.5f, -0.5f),
+					Color = new Vector3(0.1f, 0.8f, 0.1f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(-0.5f, 0.5f, -0.5f),
+					Color = new Vector3(0.1f, 0.8f, 0.1f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(-0.5f, -0.5f, -0.5f),
+					Color = new Vector3(0.1f, 0.8f, 0.1f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(0.5f, -0.5f, -0.5f),
+					Color = new Vector3(0.1f, 0.8f, 0.1f)
+				},
+				new VertexT()
+				{
+					Position = new Vector3(0.5f, 0.5f, -0.5f),
+					Color = new Vector3(0.1f, 0.8f, 0.1f)
+				}
+			};
+
+			VertexT[] arr = vertices.ToArray();
+
+			for (int i = 0; i < arr.Length; i++)
+			{
+				arr[i].Position += offset;
+			}
+
+			ModelT Model = new(ref device, ref arr);
+
+			return Model;
 		}
 
 		private void LoadGameObjects() 
 		{
-			List<VertexT> vertices = new();
+			ModelT model = CreateCubeModel(ref Device, new Vector3(0.0f, 0.0f, 0.0f));
 
-			vertices.Add(new VertexT() 
-			{ 
-				Position = new Vector2(0.0f,-0.5f),
-				Color = new Vector3(1.0f,0.0f,0.0f)
-			});
-			vertices.Add(new VertexT() 
-			{ 
-				Position = new Vector2(0.5f, 0.5f),
-				Color = new Vector3(0.0f, 1.0f, 0.0f)
-			});
-			vertices.Add(new VertexT() 
-			{ 
-				Position = new Vector2(-0.5f, 0.5f),
-				Color = new Vector3(0.0f, 0.0f, 1.0f)
-			});
+			GameObjectT cube = new();
+			cube.Model = model;
 
-			//Sierpinski(ref vertices, 5, new Vector2(-0.5f, 0.5f), new Vector2( 0.5f, 0.5f), new Vector2(0.0f, -0.5f));
+			cube.Transform.Translation = new Vector3(0.0f, 0.0f, 2.5f);
+			cube.Transform.Scale = new Vector3(0.5f, 0.5f, 0.5f);
 
-			VertexT[] arrVertices = vertices.ToArray();
-
-			ModelT Model = new(ref Device, ref arrVertices);
-
-			GameObjectT triangle = new();
-			triangle.Model = Model;
-			triangle.Color = new Vector3(0.1f, 0.8f, 0.1f);
-			triangle.Transform2D.Translation.X = 0.2f;
-			triangle.Transform2D.Scale = new Vector2(2.0f, 0.5f);
-			triangle.Transform2D.Rotation = 0.25f * (MathF.PI * 2);
-
-			GameObjects.Add(triangle);
+			GameObjects.Add(cube);
 		}
 
 		unsafe public void Destroy() 

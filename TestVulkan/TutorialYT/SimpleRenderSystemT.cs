@@ -1,9 +1,19 @@
 ﻿using Evergine.Bindings.Vulkan;
 using System;
+using System.Numerics;
 using System.Runtime.InteropServices;
 
 namespace TestVulkan
 {
+	[StructLayout(LayoutKind.Explicit)]
+	public struct SimplePushConstantData
+	{
+		[FieldOffset(0)]
+		public Matrix4x4 Transform = Matrix4x4.Identity;
+		[FieldOffset(64)]
+		public Vector3 Color;
+
+	}
 	public class SimpleRenderSystemT
 	{
 		private DeviceT Device;
@@ -18,18 +28,20 @@ namespace TestVulkan
 			CreatePipeline(renderPass);
 		}
 
-		unsafe public void RenderGameObjects(VkCommandBuffer commandBuffer, ref List<GameObjectT> gameObjects)
+		unsafe public void RenderGameObjects(VkCommandBuffer commandBuffer, ref List<GameObjectT> gameObjects, ref CameraT camera)
 		{
 			Pipeline.Bind(commandBuffer);
 
+			Matrix4x4 projectionView = camera.GetView * camera.GetProjection;
+
 			foreach (GameObjectT obj in gameObjects)
 			{
-				//obj.Transform2D.Rotation = (float)((obj.Transform2D.Rotation + 0.01f) % (Math.PI * 2));
+				obj.Transform.Rotation.Y = (float)((obj.Transform.Rotation.Y + 0.01f) % (Math.PI * 2));
+				obj.Transform.Rotation.X = (float)((obj.Transform.Rotation.X + 0.005f) % (Math.PI * 2));
 
 				SimplePushConstantData push = new();
-				push.Offset = obj.Transform2D.Translation;
 				push.Color = obj.Color;
-				push.Transform = obj.Transform2D.Mat4();
+				push.Transform = obj.Transform.Mat4() * projectionView;
 
 				VulkanNative.vkCmdPushConstants(commandBuffer, PipelineLayout, VkShaderStageFlags.VK_SHADER_STAGE_VERTEX_BIT | VkShaderStageFlags.VK_SHADER_STAGE_FRAGMENT_BIT, 0, (uint)Marshal.SizeOf<SimplePushConstantData>(), &push);
 
