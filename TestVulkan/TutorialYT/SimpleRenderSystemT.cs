@@ -36,8 +36,7 @@ namespace TestVulkan
 
 			foreach (GameObjectT obj in gameObjects)
 			{
-				obj.Transform.Rotation.Y = (float)((obj.Transform.Rotation.Y + 0.01f) % (Math.PI * 2));
-				obj.Transform.Rotation.X = (float)((obj.Transform.Rotation.X + 0.005f) % (Math.PI * 2));
+				//obj.Transform.Angle = obj.Transform.Angle + 0.01f % (MathF.PI * 2);
 
 				SimplePushConstantData push = new();
 				push.Color = obj.Color;

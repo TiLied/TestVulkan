@@ -269,14 +269,13 @@ namespace TestVulkan
 		private VkPresentModeKHR ChooseSwapPresentMode(VkPresentModeKHR[] availablePresentModes)
 		{
 			VkPresentModeKHR returnPresentMode = VkPresentModeKHR.VK_PRESENT_MODE_FIFO_KHR;
-			/*
+
 			foreach (VkPresentModeKHR availablePresentMode in availablePresentModes)
 			{
 				Trace.WriteLine($"Available Swap Present Mode: {availablePresentMode}");
 				if (availablePresentMode == VkPresentModeKHR.VK_PRESENT_MODE_MAILBOX_KHR)
 					returnPresentMode = availablePresentMode;
 			}
-			*/
 			Trace.WriteLine($"Return Present Mode: {returnPresentMode}");
 
 			return returnPresentMode;

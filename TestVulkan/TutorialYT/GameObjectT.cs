@@ -9,23 +9,32 @@ namespace TestVulkan
 		public Vector3 Translation;
 		public Vector3 Scale = new(1.0f, 1.0f, 1.0f);
 		public Vector3 Rotation;
+		public float Angle = 0f;
+
 		public Matrix4x4 Mat4() 
 		{
-
 			/*
-			Matrix4x4 tramsform = Matrix4x4.CreateScale(Scale);
+			Matrix4x4 transform = Matrix4x4.CreateScale(Scale);
 			
-			Matrix4x4 tramsform1 = Matrix4x4.CreateRotationZ(Rotation.Z);
-			Matrix4x4 tramsform2 = Matrix4x4.CreateRotationX(Rotation.X);
-			Matrix4x4 tramsform3 = Matrix4x4.CreateRotationY(Rotation.Y);
+			Matrix4x4 transform1 = Matrix4x4.CreateRotationZ(Rotation.Z);
+			Matrix4x4 transform2 = Matrix4x4.CreateRotationX(Rotation.X);
+			Matrix4x4 transform3 = Matrix4x4.CreateRotationY(Rotation.Y);
 
-			tramsform *= tramsform1;
-			tramsform *= tramsform2;
-			tramsform *= tramsform3;
+			transform *= transform1;
+			transform *= transform2;
+			transform *= transform3;
 
-			tramsform *= Matrix4x4.CreateTranslation(Translation);
+			transform *= Matrix4x4.CreateTranslation(Translation);
 			*/
+			/*
+			Matrix4x4 transform = Matrix4x4.CreateScale(Scale);
 
+			Matrix4x4 transform1 = Matrix4x4.CreateFromQuaternion(Quaternion.CreateFromAxisAngle(Vector3.UnitY, Angele));
+
+			transform *= transform1;
+
+			transform *= Matrix4x4.CreateTranslation(Translation);
+			*/
 			float c3 = MathF.Cos(Rotation.Z);
 			float s3 = MathF.Sin(Rotation.Z);
 			float c2 = MathF.Cos(Rotation.X);

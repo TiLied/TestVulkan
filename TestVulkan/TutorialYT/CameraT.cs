@@ -69,6 +69,7 @@ namespace TestVulkan
 
 		public void SetViewTarget(Vector3 position, Vector3 target, Vector3? up)
 		{
+			//Matrix4x4.CreateLookAt
 			if (up == null)
 				up = new Vector3(0.0f, -1.0f, 0.0f);
 

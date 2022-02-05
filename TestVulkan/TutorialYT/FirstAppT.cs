@@ -32,13 +32,24 @@ namespace TestVulkan
 		{
 			SimpleRenderSystemT simpleRenderSystem = new(ref Device, Renderer.GetSwapchainRenderPass);
 			CameraT camera = new();
-			//camera.SetViewDirection(Vector3.Zero, new Vector3(0.5f, 0.0f, 1.0f), null);
 			camera.SetViewTarget(new Vector3(-1.0f, -2.0f, 2.0f), new Vector3(0.0f, 0.0f, 2.5f), null);
+
+			GameObjectT viewerObject = new();
+			KeyboardMovementController cameraController = new();
+
+			//long currentTime = DateTime.Now.Ticks;
+			double lastTime = 0.0;
 
 			bool run = true;
 			while (run)
 			{
-				if (SDL.SDL_PollEvent(out SDL.SDL_Event test_event) == 1)
+				//long newTime = DateTime.Now.Ticks;
+				//float frameTime = (float)(TimeSpan.FromTicks(newTime).TotalSeconds - TimeSpan.FromTicks(currentTime).TotalSeconds);
+				//currentTime = newTime;
+				double time = SDL.SDL_GetTicks64();
+				float frameTime = (float)(TimeSpan.FromTicks((long)time).TotalSeconds - TimeSpan.FromTicks((long)lastTime).TotalSeconds);
+
+				if (SDL.SDL_PollEvent(out SDL.SDL_Event test_event) != 0)
 				{
 					if (test_event.window.windowEvent == SDL.SDL_WindowEventID.SDL_WINDOWEVENT_CLOSE || test_event.type == SDL.SDL_EventType.SDL_QUIT)
 					{
@@ -56,7 +67,6 @@ namespace TestVulkan
 						//Trace.WriteLine($"SDL_WINDOWEVENT_MINIMIZED {Minimazed}");
 					}
 
-
 					//test! nice!
 					if (test_event.type == SDL.SDL_EventType.SDL_KEYDOWN)
 					{
@@ -66,26 +76,28 @@ namespace TestVulkan
 								{
 									if (test_event.key.repeat == 1)
 										break;
-									Trace.WriteLine(SDL.SDL_Keycode.SDLK_LEFT);
-									Trace.WriteLine(test_event.key.repeat);
+									//Trace.WriteLine(SDL.SDL_Keycode.SDLK_LEFT);
+									//Trace.WriteLine(test_event.key.repeat);
 									//Frame--;
 									break;
 								}
 							case SDL.SDL_Keycode.SDLK_RIGHT:
-								Trace.WriteLine(SDL.SDL_Keycode.SDLK_RIGHT);
+								//Trace.WriteLine(SDL.SDL_Keycode.SDLK_RIGHT);
 								//Frame++;
 								break;
 							default:
 								break;
 						}
+
+						cameraController.MovePlaneXZ(ref test_event, frameTime, ref viewerObject);
 					}
 				}
 
-				float aspect = Renderer.GetAspectRatio;
-				//camera.SetOrthographicProjection(-aspect, aspect, -1.0f, 1.0f, -1.0f, 1.0f);
-				//
-				camera.SetPerspectiveProjection((MathF.PI * 5)/18, aspect, 0.1f, 10.0f);
+				camera.SetViewYXZ(viewerObject.Transform.Translation, viewerObject.Transform.Rotation);
 				
+				float aspect = Renderer.GetAspectRatio;
+				camera.SetPerspectiveProjection((MathF.PI * 5) / 18, aspect, 0.1f, 10.0f);
+
 				VkCommandBuffer? commandBuffer = Renderer.BeginFrame();
 				if (commandBuffer != null)
 				{
@@ -95,6 +107,7 @@ namespace TestVulkan
 					Renderer.EndSwapChainRenderPass(cB);
 					Renderer.EndFrame();
 				}
+				
 			}
 
 			VulkanNative.vkDeviceWaitIdle(Device.Device);
