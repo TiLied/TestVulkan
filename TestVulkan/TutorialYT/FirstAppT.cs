@@ -38,7 +38,10 @@ namespace TestVulkan
 			KeyboardMovementController cameraController = new();
 
 			//long currentTime = DateTime.Now.Ticks;
-			double lastTime = 0.0;
+			long lastTime = 0;
+
+			Stopwatch sw = new();
+			sw.Start();
 
 			bool run = true;
 			while (run)
@@ -46,8 +49,9 @@ namespace TestVulkan
 				//long newTime = DateTime.Now.Ticks;
 				//float frameTime = (float)(TimeSpan.FromTicks(newTime).TotalSeconds - TimeSpan.FromTicks(currentTime).TotalSeconds);
 				//currentTime = newTime;
-				double time = SDL.SDL_GetTicks64();
-				float frameTime = (float)(TimeSpan.FromTicks((long)time).TotalSeconds - TimeSpan.FromTicks((long)lastTime).TotalSeconds);
+				long time = sw.ElapsedTicks;
+				double frameTime = (double)((time - lastTime) / 10000000.0);
+				lastTime = time;
 
 				if (SDL.SDL_PollEvent(out SDL.SDL_Event test_event) != 0)
 				{
@@ -110,6 +114,7 @@ namespace TestVulkan
 				
 			}
 
+			sw.Stop();
 			VulkanNative.vkDeviceWaitIdle(Device.Device);
 			simpleRenderSystem.DestroySRS();
 			Destroy();

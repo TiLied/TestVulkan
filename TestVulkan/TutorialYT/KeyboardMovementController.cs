@@ -29,7 +29,7 @@ namespace TestVulkan
 		{
 		}
 
-		public void MovePlaneXZ(ref SDL.SDL_Event sdlEvent, float dt, ref GameObjectT gameObject) 
+		public void MovePlaneXZ(ref SDL.SDL_Event sdlEvent, double dt, ref GameObjectT gameObject) 
 		{
 			//Everything is kinda wrong, not sure what is wrong, but changed calc dt like here 
 			//https://stackoverflow.com/questions/41742142/limiting-fps-in-c
@@ -55,7 +55,7 @@ namespace TestVulkan
 			}
 
 			if(Vector3.Dot(rotate, rotate) > float.Epsilon)
-				gameObject.Transform.Rotation += LookSpeed * dt * Vector3.Normalize(rotate);
+				gameObject.Transform.Rotation += LookSpeed * (float)dt * Vector3.Normalize(rotate);
 
 			gameObject.Transform.Rotation.X = Math.Clamp(gameObject.Transform.Rotation.X, -1.5f, 1.5f);
 			gameObject.Transform.Rotation.Y = gameObject.Transform.Rotation.Y % (MathF.PI * 2);
@@ -85,7 +85,7 @@ namespace TestVulkan
 			}
 
 			if (Vector3.Dot(moveDir, moveDir) > float.Epsilon)
-				gameObject.Transform.Translation += MoveSpeed * dt * Vector3.Normalize(moveDir);
+				gameObject.Transform.Translation += MoveSpeed * (float)dt * Vector3.Normalize(moveDir);
 
 		}
 
