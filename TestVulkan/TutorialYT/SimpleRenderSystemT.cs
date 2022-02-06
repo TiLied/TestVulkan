@@ -11,7 +11,7 @@ namespace TestVulkan
 		[FieldOffset(0)]
 		public Matrix4x4 Transform = Matrix4x4.Identity;
 		[FieldOffset(64)]
-		public Vector3 Color;
+		public Matrix4x4 NormalMatrix = Matrix4x4.Identity;
 
 	}
 	public class SimpleRenderSystemT
@@ -28,24 +28,26 @@ namespace TestVulkan
 			CreatePipeline(renderPass);
 		}
 
-		unsafe public void RenderGameObjects(VkCommandBuffer commandBuffer, ref List<GameObjectT> gameObjects, ref CameraT camera)
+		unsafe public void RenderGameObjects(ref FrameInfo frameInfo, ref List<GameObjectT> gameObjects)
 		{
-			Pipeline.Bind(commandBuffer);
+			Pipeline.Bind(frameInfo.CommandBuffer);
 
-			Matrix4x4 projectionView = camera.GetView * camera.GetProjection;
+			Matrix4x4 projectionView = frameInfo.Camera.GetView * frameInfo.Camera.GetProjection;
 
 			foreach (GameObjectT obj in gameObjects)
 			{
 				//obj.Transform.Angle = obj.Transform.Angle + 0.01f % (MathF.PI * 2);
 
 				SimplePushConstantData push = new();
-				push.Color = obj.Color;
-				push.Transform = obj.Transform.Mat4() * projectionView;
+				Matrix4x4 modelMatrix = obj.Transform.Mat4();
 
-				VulkanNative.vkCmdPushConstants(commandBuffer, PipelineLayout, VkShaderStageFlags.VK_SHADER_STAGE_VERTEX_BIT | VkShaderStageFlags.VK_SHADER_STAGE_FRAGMENT_BIT, 0, (uint)Marshal.SizeOf<SimplePushConstantData>(), &push);
+				push.Transform = modelMatrix * projectionView;
+				push.NormalMatrix = obj.Transform.NormalMatrix();
 
-				obj.Model.Bind(commandBuffer);
-				obj.Model.Draw(commandBuffer);
+				VulkanNative.vkCmdPushConstants(frameInfo.CommandBuffer, PipelineLayout, VkShaderStageFlags.VK_SHADER_STAGE_VERTEX_BIT | VkShaderStageFlags.VK_SHADER_STAGE_FRAGMENT_BIT, 0, (uint)Marshal.SizeOf<SimplePushConstantData>(), &push);
+
+				obj.Model.Bind(frameInfo.CommandBuffer);
+				obj.Model.Draw(frameInfo.CommandBuffer);
 			}
 		}
 		unsafe private void CreatePipelineLayout()

@@ -17,6 +17,7 @@ namespace TestVulkan
 		public void SetOrthographicProjection(float left, float right, float top, float bottom, float near, float far) 
 		{
 			//Matrix4x4.CreateOrthographicOffCenter
+			
 			ProjectionMatrix.M11 = 2.0f / (right - left);
 
 			ProjectionMatrix.M22 = 2.0f / (bottom - top);
@@ -26,12 +27,13 @@ namespace TestVulkan
 			ProjectionMatrix.M41 = -(right + left) / (right - left);
 			ProjectionMatrix.M42 = -(bottom + top) / (bottom - top);
 			ProjectionMatrix.M43 = -near / (far - near);
-
+			
 		}
 
 		public void SetPerspectiveProjection(float fovy, float aspect, float near, float far) 
 		{
 			//Matrix4x4.CreatePerspectiveFieldOfView
+
 			float tanHalfFovy = MathF.Tan(fovy / 2.0f);
 
 			ProjectionMatrix = new Matrix4x4();
@@ -41,6 +43,9 @@ namespace TestVulkan
 			ProjectionMatrix.M34 = 1.0f;
 			ProjectionMatrix.M43 = -(far * near) / (far - near);
 
+
+			//var ProjectionMatrix1 = Matrix4x4.CreatePerspectiveFieldOfView(fovy,aspect,near,far);
+			//ProjectionMatrix = ProjectionMatrix1;
 		}
 
 		public void SetViewDirection(Vector3 position, Vector3 direction, Vector3? up) 
@@ -74,6 +79,7 @@ namespace TestVulkan
 				up = new Vector3(0.0f, -1.0f, 0.0f);
 
 			SetViewDirection(position, target - position, up);
+
 		}
 
 		public void SetViewYXZ(Vector3 position, Vector3 rotation)

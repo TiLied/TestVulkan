@@ -67,6 +67,43 @@ namespace TestVulkan
 
 			return mat4;
 		}
+
+		public Matrix4x4 NormalMatrix() 
+		{
+			float c3 = MathF.Cos(Rotation.Z);
+			float s3 = MathF.Sin(Rotation.Z);
+			float c2 = MathF.Cos(Rotation.X);
+			float s2 = MathF.Sin(Rotation.X);
+			float c1 = MathF.Cos(Rotation.Y);
+			float s1 = MathF.Sin(Rotation.Y);
+
+			Vector3 invScale = Vector3.One / Scale;
+
+			Matrix4x4 mat4 = new()
+			{
+				M11 = invScale.X * (c1 * c3 + s1 * s2 * s3),
+				M12 = invScale.X * (c2 * s3),
+				M13 = invScale.X * (c1 * s2 * s3 - c3 * s1),
+				M14 = 0.0f,
+
+				M21 = invScale.Y * (c3 * s1 * s2 - c1 * s3),
+				M22 = invScale.Y * (c2 * c3),
+				M23 = invScale.Y * (c1 * c3 * s2 + s1 * s3),
+				M24 = 0.0f,
+
+				M31 = invScale.Z * (c2 * s1),
+				M32 = invScale.Z * (-s2),
+				M33 = invScale.Z * (c1 * c2),
+				M34 = 0.0f,
+
+				M41 = 0.0f,
+				M42 = 0.0f,
+				M43 = 0.0f,
+				M44 = 1.0f
+			};
+
+			return mat4;
+		}
 	}
 
 	public class GameObjectT

@@ -7,6 +7,12 @@ using System.Runtime.InteropServices;
 
 namespace TestVulkan
 {
+	public struct GlobalUbo 
+	{
+		public Matrix4x4 projectionView = Matrix4x4.Identity;
+		public Vector3 ligthDiraction =Vector3.Normalize(new Vector3(1.0f, -3.0f, -1.0f));
+	}
+
 	public class FirstAppT
 	{
 		private const int WIDTH = 960;
@@ -30,6 +36,18 @@ namespace TestVulkan
 
 		public void Run() 
 		{
+			BufferT[] uboBuffers = new BufferT[SwapChainT.MAX_FRAMES_IN_FLIGHT];
+			for (int i = 0; i < uboBuffers.Length; i++)
+			{
+				uboBuffers[i] = new BufferT(ref Device,
+				(ulong)Marshal.SizeOf<GlobalUbo>(),
+				1,
+				VkBufferUsageFlags.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+				VkMemoryPropertyFlags.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+
+				uboBuffers[i].Map();
+			}
+
 			SimpleRenderSystemT simpleRenderSystem = new(ref Device, Renderer.GetSwapchainRenderPass);
 			CameraT camera = new();
 			camera.SetViewTarget(new Vector3(-1.0f, -2.0f, 2.0f), new Vector3(0.0f, 0.0f, 2.5f), null);
@@ -38,7 +56,7 @@ namespace TestVulkan
 			KeyboardMovementController cameraController = new();
 
 			//long currentTime = DateTime.Now.Ticks;
-			long lastTime = 0;
+			float lastTime = 0;
 
 			Stopwatch sw = new();
 			sw.Start();
@@ -49,8 +67,8 @@ namespace TestVulkan
 				//long newTime = DateTime.Now.Ticks;
 				//float frameTime = (float)(TimeSpan.FromTicks(newTime).TotalSeconds - TimeSpan.FromTicks(currentTime).TotalSeconds);
 				//currentTime = newTime;
-				long time = sw.ElapsedTicks;
-				double frameTime = (double)((time - lastTime) / 10000000.0);
+				float time = sw.ElapsedTicks;
+				float frameTime = (time - lastTime) / 10000000.0f;
 				lastTime = time;
 
 				if (SDL.SDL_PollEvent(out SDL.SDL_Event test_event) != 0)
@@ -93,10 +111,14 @@ namespace TestVulkan
 								break;
 						}
 
-						cameraController.MovePlaneXZ(ref test_event, frameTime, ref viewerObject);
+						//cameraController.MovePlaneXZ(ref test_event, frameTime, ref viewerObject);
+						//cameraController.MovePlaneXZ2(ref test_event, ref viewerObject);
 					}
+					
+					cameraController.MovePlaneXZ2(ref test_event, ref viewerObject);
 				}
 
+				cameraController.MovePlaneXZ3(frameTime, ref viewerObject);
 				camera.SetViewYXZ(viewerObject.Transform.Translation, viewerObject.Transform.Rotation);
 				
 				float aspect = Renderer.GetAspectRatio;
@@ -105,13 +127,33 @@ namespace TestVulkan
 				VkCommandBuffer? commandBuffer = Renderer.BeginFrame();
 				if (commandBuffer != null)
 				{
+					int frameIndex = Renderer.GetFrameIndex;
 					VkCommandBuffer cB = (VkCommandBuffer)commandBuffer;
+					FrameInfo frameInfo = new();
+					frameInfo.FrameIndex = frameIndex;
+					frameInfo.FrameTime = frameTime;
+					frameInfo.CommandBuffer =cB;
+					frameInfo.Camera = camera;
+
+					//update
+					GlobalUbo ubo = new();
+					ubo.projectionView = camera.GetView * camera.GetProjection;
+					uboBuffers[frameIndex].WriteToBufferU(ref ubo);
+					uboBuffers[frameIndex].Flush();
+					//globalUboBuffer.WriteToIndexU(ref ubo, frameIndex);
+					//globalUboBuffer.FlushIndex(frameIndex);
+
+					//render
 					Renderer.BeginSwapChainRenderPass(cB);
-					simpleRenderSystem.RenderGameObjects(cB, ref GameObjects, ref camera);
+					simpleRenderSystem.RenderGameObjects(ref frameInfo, ref GameObjects);
 					Renderer.EndSwapChainRenderPass(cB);
 					Renderer.EndFrame();
 				}
 				
+			}
+			foreach (BufferT item in uboBuffers)
+			{
+				item.DestroyBuffer();
 			}
 
 			sw.Stop();
@@ -119,241 +161,28 @@ namespace TestVulkan
 			simpleRenderSystem.DestroySRS();
 			Destroy();
 		}
-		/*
-		private void Sierpinski(ref List<VertexT> vertices, int depth, Vector2 left, Vector2 right, Vector2 top)
-		{
-			if (depth <= 0)
-			{
-				vertices.Add(new VertexT() { Position = top });
-				vertices.Add(new VertexT() { Position = right });
-				vertices.Add(new VertexT() { Position = left });
-			}
-			else
-			{
-				Vector2 leftTop = 0.5f * (left + top);
-				Vector2 rightTop = 0.5f * (right + top);
-				Vector2 leftRight = 0.5f * (left + right);
-				Sierpinski(ref vertices, depth - 1, left, leftRight, leftTop);
-				Sierpinski(ref vertices, depth - 1, leftRight, right, rightTop);
-				Sierpinski(ref vertices, depth - 1, leftTop, rightTop, top);
-			}
-		}*/
-
-		private ModelT CreateCubeModel(ref DeviceT device , Vector3 offset)
-		{
-			List<VertexT> vertices = new()
-			{
-				// left face (white)
-				new VertexT() 
-				{ 
-					Position = new Vector3(-0.5f, -0.5f, -0.5f),
-					Color = new Vector3(0.9f, 0.9f, 0.9f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(-0.5f, 0.5f, 0.5f),
-					Color = new Vector3(0.9f, 0.9f, 0.9f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(-0.5f, -0.5f, 0.5f),
-					Color = new Vector3(0.9f, 0.9f, 0.9f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(-0.5f, -0.5f, -0.5f),
-					Color = new Vector3(0.9f, 0.9f, 0.9f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(-0.5f, 0.5f, -0.5f),
-					Color = new Vector3(0.9f, 0.9f, 0.9f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(-0.5f, 0.5f, 0.5f),
-					Color = new Vector3(0.9f, 0.9f, 0.9f)
-				},
-				// right face (yellow)
-				new VertexT()
-				{
-					Position = new Vector3(0.5f, -0.5f, -0.5f),
-					Color = new Vector3(0.8f, 0.8f, 0.1f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(0.5f, 0.5f, 0.5f),
-					Color = new Vector3(0.8f, 0.8f, 0.1f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(0.5f, -0.5f, 0.5f),
-					Color = new Vector3(0.8f, 0.8f, 0.1f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(0.5f, -0.5f, -0.5f),
-					Color = new Vector3(0.8f, 0.8f, 0.1f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(0.5f, 0.5f, -0.5f),
-					Color = new Vector3(0.8f, 0.8f, 0.1f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(0.5f, 0.5f, 0.5f),
-					Color = new Vector3(0.8f, 0.8f, 0.1f)
-				},
-				// top face (orange, remember y axis points down)
-				new VertexT()
-				{
-					Position = new Vector3(-0.5f, -0.5f, -0.5f),
-					Color = new Vector3(0.9f, 0.6f, 0.1f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(0.5f, -0.5f, 0.5f),
-					Color = new Vector3(0.9f, 0.6f, 0.1f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(-0.5f, -0.5f, 0.5f),
-					Color = new Vector3(0.9f, 0.6f, 0.1f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(-0.5f, -0.5f, -0.5f),
-					Color = new Vector3(0.9f, 0.6f, 0.1f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(0.5f, -0.5f, -0.5f),
-					Color = new Vector3(0.9f, 0.6f, 0.1f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(0.5f, -0.5f, 0.5f),
-					Color = new Vector3(0.9f, 0.6f, 0.1f)
-				},
-				// bottom face (red)
-				new VertexT()
-				{
-					Position = new Vector3(-0.5f, 0.5f, -0.5f),
-					Color = new Vector3(0.8f, 0.1f, 0.1f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(0.5f, 0.5f, 0.5f),
-					Color = new Vector3(0.8f, 0.1f, 0.1f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(-0.5f, 0.5f, 0.5f),
-					Color = new Vector3(0.8f, 0.1f, 0.1f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(-0.5f, 0.5f, -0.5f),
-					Color = new Vector3(0.8f, 0.1f, 0.1f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(0.5f, 0.5f, -0.5f),
-					Color = new Vector3(0.8f, 0.1f, 0.1f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(0.5f, 0.5f, 0.5f),
-					Color = new Vector3(0.8f, 0.1f, 0.1f)
-				},
-				// nose face (blue)
-				new VertexT()
-				{
-					Position = new Vector3(-0.5f, -0.5f, 0.5f),
-					Color = new Vector3(0.1f, 0.1f, 0.8f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(0.5f, 0.5f, 0.5f),
-					Color = new Vector3(0.1f, 0.1f, 0.8f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(-0.5f, 0.5f, 0.5f),
-					Color = new Vector3(0.1f, 0.1f, 0.8f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(-0.5f, -0.5f, 0.5f),
-					Color = new Vector3(0.1f, 0.1f, 0.8f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(0.5f, -0.5f, 0.5f),
-					Color = new Vector3(0.1f, 0.1f, 0.8f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(0.5f, 0.5f, 0.5f),
-					Color = new Vector3(0.1f, 0.1f, 0.8f)
-				},
-				// tail face (green)
-				new VertexT()
-				{
-					Position = new Vector3(-0.5f, -0.5f, -0.5f),
-					Color = new Vector3(0.1f, 0.8f, 0.1f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(0.5f, 0.5f, -0.5f),
-					Color = new Vector3(0.1f, 0.8f, 0.1f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(-0.5f, 0.5f, -0.5f),
-					Color = new Vector3(0.1f, 0.8f, 0.1f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(-0.5f, -0.5f, -0.5f),
-					Color = new Vector3(0.1f, 0.8f, 0.1f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(0.5f, -0.5f, -0.5f),
-					Color = new Vector3(0.1f, 0.8f, 0.1f)
-				},
-				new VertexT()
-				{
-					Position = new Vector3(0.5f, 0.5f, -0.5f),
-					Color = new Vector3(0.1f, 0.8f, 0.1f)
-				}
-			};
-
-			VertexT[] arr = vertices.ToArray();
-
-			for (int i = 0; i < arr.Length; i++)
-			{
-				arr[i].Position += offset;
-			}
-
-			ModelT Model = new(ref device, ref arr);
-
-			return Model;
-		}
 
 		private void LoadGameObjects() 
 		{
-			ModelT model = CreateCubeModel(ref Device, new Vector3(0.0f, 0.0f, 0.0f));
+			ModelT model = ModelT.CreateModelFromFile(ref Device, Program.Directory + @"\TestVulkan\models\flat_vase.obj");
 
-			GameObjectT cube = new();
-			cube.Model = model;
+			GameObjectT flatVase = new();
+			flatVase.Model = model;
 
-			cube.Transform.Translation = new Vector3(0.0f, 0.0f, 2.5f);
-			cube.Transform.Scale = new Vector3(0.5f, 0.5f, 0.5f);
+			flatVase.Transform.Translation = new Vector3(-0.5f, 0.5f, 2.5f);
+			flatVase.Transform.Scale = new Vector3(3f, 1.5f, 3f);
 
-			GameObjects.Add(cube);
+			GameObjects.Add(flatVase);
+
+			model = ModelT.CreateModelFromFile(ref Device, Program.Directory + @"\TestVulkan\models\smooth_vase.obj");
+
+			GameObjectT smoothVase = new();
+			smoothVase.Model = model;
+
+			smoothVase.Transform.Translation = new Vector3(0.5f, 0.5f, 2.5f);
+			smoothVase.Transform.Scale = new Vector3(3f, 1.5f, 3f);
+
+			GameObjects.Add(smoothVase);
 		}
 
 		unsafe public void Destroy() 

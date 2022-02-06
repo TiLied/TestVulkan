@@ -48,6 +48,7 @@ namespace TestVulkan
 		private string[] ValidationLayers = { "VK_LAYER_KHRONOS_validation" };
 		private string[] DeviceExtensions = { "VK_KHR_swapchain" };
 
+		public VkPhysicalDeviceProperties Properties;
 		public DeviceT(ref WindowT window)
 		{
 			Window = window;
@@ -227,6 +228,7 @@ namespace TestVulkan
 
 			VkPhysicalDeviceProperties deviceProperties;
 			VulkanNative.vkGetPhysicalDeviceProperties(PhysicalDevice, &deviceProperties);
+			Properties = deviceProperties;
 
 			Trace.WriteLine($"Device Name: {Marshal.PtrToStringAnsi((IntPtr)deviceProperties.deviceName)}");
 		}
@@ -546,6 +548,51 @@ namespace TestVulkan
 			VulkanNative.vkBindBufferMemory(Device, buffer, bufferMemory, 0);
 		}
 
+		unsafe public void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, ulong size)
+		{
+			VkCommandBuffer commandBuffer = BeginSingleTimeCommands();
+
+			VkBufferCopy copyRegion = new();
+			copyRegion.srcOffset = 0;  // Optional
+			copyRegion.dstOffset = 0;  // Optional
+			copyRegion.size = size;
+			VulkanNative.vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+			EndSingleTimeCommands(commandBuffer);
+		}
+		unsafe public VkCommandBuffer BeginSingleTimeCommands()
+		{
+			VkCommandBufferAllocateInfo allocInfo = new();
+			allocInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+			allocInfo.level = VkCommandBufferLevel.VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+			allocInfo.commandPool = CommandPool;
+			allocInfo.commandBufferCount = 1;
+
+			VkCommandBuffer commandBuffer;
+			VulkanNative.vkAllocateCommandBuffers(Device, &allocInfo, &commandBuffer);
+
+			VkCommandBufferBeginInfo beginInfo = new();
+			beginInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+			beginInfo.flags = VkCommandBufferUsageFlags.VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+			VulkanNative.vkBeginCommandBuffer(commandBuffer, &beginInfo);
+			return commandBuffer;
+		}
+
+		unsafe public void EndSingleTimeCommands(VkCommandBuffer commandBuffer)
+		{
+			VulkanNative.vkEndCommandBuffer(commandBuffer);
+
+			VkSubmitInfo submitInfo = new();
+			submitInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_SUBMIT_INFO;
+			submitInfo.commandBufferCount = 1;
+			submitInfo.pCommandBuffers = &commandBuffer;
+
+			VulkanNative.vkQueueSubmit(GraphicsQueue, 1, &submitInfo, VkFence.Null);
+			VulkanNative.vkQueueWaitIdle(GraphicsQueue);
+
+			VulkanNative.vkFreeCommandBuffers(Device, CommandPool, 1, &commandBuffer);
+		}
 		//debug
 		//https://github.com/EvergineTeam/Vulkan.NET/blob/master/VulkanGen/HelloTriangle/0-Setup/HelloTriangle_ValidationLayer.cs
 
