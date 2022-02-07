@@ -7,14 +7,10 @@ using System.Runtime.InteropServices;
 
 namespace TestVulkan
 {
-	public struct GlobalUbo 
-	{
-		public Matrix4x4 projectionView = Matrix4x4.Identity;
-		public Vector3 ligthDiraction =Vector3.Normalize(new Vector3(1.0f, -3.0f, -1.0f));
-	}
-
 	public class FirstAppT
 	{
+		public const int MAX_LIGHTS = 10;
+
 		private const int WIDTH = 960;
 		private const int HEIGHT = 540;
 
@@ -22,14 +18,19 @@ namespace TestVulkan
 
 		private WindowT Window;
 		private DeviceT Device;
-		private List<GameObjectT> GameObjects = new();
 		private RendererT Renderer;
+		private DescriptorPoolT GlobalPool;
 
 		public FirstAppT()
 		{
 			Window = new(WIDTH, HEIGHT, "Hello Vulkan!");
 			Device = new(ref Window);
 			Renderer = new(ref Window, ref Device);
+			GlobalPool = new DescriptorPoolT.Builder(ref Device)
+				.SetMaxSets(SwapChainT.MAX_FRAMES_IN_FLIGHT)
+				.AddPoolSize( VkDescriptorType.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, SwapChainT.MAX_FRAMES_IN_FLIGHT)
+				.Build();
+
 
 			LoadGameObjects();
 		}
@@ -48,11 +49,28 @@ namespace TestVulkan
 				uboBuffers[i].Map();
 			}
 
-			SimpleRenderSystemT simpleRenderSystem = new(ref Device, Renderer.GetSwapchainRenderPass);
+			DescriptorSetLayoutT globalSetLayout = new DescriptorSetLayoutT.Builder(ref Device)
+				.AddBinding(0, VkDescriptorType.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VkShaderStageFlags.VK_SHADER_STAGE_VERTEX_BIT | VkShaderStageFlags.VK_SHADER_STAGE_FRAGMENT_BIT)
+				.Build();
+
+			VkDescriptorSet[] globalDescriptorSers = new VkDescriptorSet[SwapChainT.MAX_FRAMES_IN_FLIGHT];
+			for (int i = 0; i < globalDescriptorSers.Length; i++)
+			{
+				VkDescriptorBufferInfo bufferInfo = uboBuffers[i].DescriptorInfo();
+				new DescriptorWriterT(ref globalSetLayout, ref GlobalPool)
+					.WriteBuffer(0, ref bufferInfo)
+					.Build(ref globalDescriptorSers[i]);
+			}
+
+			SimpleRenderSystemT simpleRenderSystem = new(ref Device, Renderer.GetSwapchainRenderPass, globalSetLayout.GetDescriptorSetLayout);
+			
+			PointLightSystemT pointLightSystem = new(ref Device, Renderer.GetSwapchainRenderPass, globalSetLayout.GetDescriptorSetLayout);
+
 			CameraT camera = new();
 			camera.SetViewTarget(new Vector3(-1.0f, -2.0f, 2.0f), new Vector3(0.0f, 0.0f, 2.5f), null);
 
 			GameObjectT viewerObject = new();
+			viewerObject.Transform.Translation.Z = -2.5f;
 			KeyboardMovementController cameraController = new();
 
 			//long currentTime = DateTime.Now.Ticks;
@@ -122,8 +140,9 @@ namespace TestVulkan
 				camera.SetViewYXZ(viewerObject.Transform.Translation, viewerObject.Transform.Rotation);
 				
 				float aspect = Renderer.GetAspectRatio;
-				camera.SetPerspectiveProjection((MathF.PI * 5) / 18, aspect, 0.1f, 10.0f);
-
+				camera.SetPerspectiveProjection((MathF.PI * 5) / 18, aspect, 0.1f, 100.0f);
+				//camera.SetPerspectiveProjection(39.6f * (MathF.PI / 180), aspect, 0.1f, 10.0f);
+	
 				VkCommandBuffer? commandBuffer = Renderer.BeginFrame();
 				if (commandBuffer != null)
 				{
@@ -134,10 +153,13 @@ namespace TestVulkan
 					frameInfo.FrameTime = frameTime;
 					frameInfo.CommandBuffer =cB;
 					frameInfo.Camera = camera;
+					frameInfo.GlobalDescriptorSet = globalDescriptorSers[frameIndex];
 
 					//update
 					GlobalUbo ubo = new();
-					ubo.projectionView = camera.GetView * camera.GetProjection;
+					ubo.Projection = camera.GetProjection;
+					ubo.View = camera.GetView;
+					pointLightSystem.Update(ref frameInfo, ref ubo);
 					uboBuffers[frameIndex].WriteToBufferU(ref ubo);
 					uboBuffers[frameIndex].Flush();
 					//globalUboBuffer.WriteToIndexU(ref ubo, frameIndex);
@@ -145,19 +167,22 @@ namespace TestVulkan
 
 					//render
 					Renderer.BeginSwapChainRenderPass(cB);
-					simpleRenderSystem.RenderGameObjects(ref frameInfo, ref GameObjects);
+					simpleRenderSystem.RenderGameObjects(ref frameInfo);
+					pointLightSystem.Render(ref frameInfo);
 					Renderer.EndSwapChainRenderPass(cB);
 					Renderer.EndFrame();
 				}
 				
 			}
+
+			VulkanNative.vkDeviceWaitIdle(Device.Device);
+
 			foreach (BufferT item in uboBuffers)
 			{
 				item.DestroyBuffer();
 			}
 
 			sw.Stop();
-			VulkanNative.vkDeviceWaitIdle(Device.Device);
 			simpleRenderSystem.DestroySRS();
 			Destroy();
 		}
@@ -169,24 +194,38 @@ namespace TestVulkan
 			GameObjectT flatVase = new();
 			flatVase.Model = model;
 
-			flatVase.Transform.Translation = new Vector3(-0.5f, 0.5f, 2.5f);
+			flatVase.Transform.Translation = new Vector3(-0.5f, 0.5f, 0f);
 			flatVase.Transform.Scale = new Vector3(3f, 1.5f, 3f);
 
-			GameObjects.Add(flatVase);
+			GameObjectT.Map.Add(flatVase.GetId(), flatVase);
 
 			model = ModelT.CreateModelFromFile(ref Device, Program.Directory + @"\TestVulkan\models\smooth_vase.obj");
 
 			GameObjectT smoothVase = new();
 			smoothVase.Model = model;
 
-			smoothVase.Transform.Translation = new Vector3(0.5f, 0.5f, 2.5f);
+			smoothVase.Transform.Translation = new Vector3(0.5f, 0.5f, 0f);
 			smoothVase.Transform.Scale = new Vector3(3f, 1.5f, 3f);
 
-			GameObjects.Add(smoothVase);
+			GameObjectT.Map.Add(smoothVase.GetId(), smoothVase);
+
+			model = ModelT.CreateModelFromFile(ref Device, Program.Directory + @"\TestVulkan\models\quad.obj");
+
+			GameObjectT gameObjectFloor = new();
+			gameObjectFloor.Model = model;
+
+			gameObjectFloor.Transform.Translation = new Vector3(0f, 0.5f, 0f);
+			gameObjectFloor.Transform.Scale = new Vector3(3f, 1f, 3f);
+
+			GameObjectT.Map.Add(gameObjectFloor.GetId(), gameObjectFloor);
+
+			GameObjectT pointLight = new(Vector3.One, 0.2f);
+			GameObjectT.Map.Add(pointLight.GetId(), pointLight);
 		}
 
 		unsafe public void Destroy() 
 		{
+			GlobalPool.DestroyDescriptorPool();
 			Renderer.DestroyRenderer();
 			Device.DestroyDebugMessenger();
 			Window.DestroyWindow();

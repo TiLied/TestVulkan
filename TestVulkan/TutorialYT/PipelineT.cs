@@ -5,6 +5,9 @@ namespace TestVulkan
 {
 	public struct PipelineConfigInfo
 	{
+		public VkVertexInputBindingDescription[] BindingDescriptions;
+		public VkVertexInputAttributeDescription[] AttributeDescriptions;
+
 		public VkPipelineViewportStateCreateInfo ViewportInfo;
 		public VkPipelineInputAssemblyStateCreateInfo InputAssemblyInfo;
 		public VkPipelineRasterizationStateCreateInfo RasterizationInfo;
@@ -71,20 +74,30 @@ namespace TestVulkan
 			shaderStages[1].pNext = null;
 			shaderStages[1].pSpecializationInfo = null;
 
-			VkVertexInputBindingDescription[] bindingDescriptions = VertexT.GetBindingDescriptions();
-			VkVertexInputAttributeDescription[] attributeDescriptions = VertexT.GetAttributeDescriptions();
+			VkVertexInputBindingDescription[] bindingDescriptions = configInfo.BindingDescriptions;
+			VkVertexInputAttributeDescription[] attributeDescriptions = configInfo.AttributeDescriptions;
 
 			VkPipelineVertexInputStateCreateInfo vertexInputInfo = new();
 			vertexInputInfo.sType = VkStructureType.VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-			vertexInputInfo.vertexAttributeDescriptionCount = (uint)attributeDescriptions.Length;
-			vertexInputInfo.vertexBindingDescriptionCount = (uint)bindingDescriptions.Length;
-			fixed (VkVertexInputAttributeDescription* pAD = &attributeDescriptions[0])
+			if (attributeDescriptions.Length == 0)
 			{
-				vertexInputInfo.pVertexAttributeDescriptions = pAD;
+				vertexInputInfo.vertexAttributeDescriptionCount = 0;
+				vertexInputInfo.vertexBindingDescriptionCount = 0;
+				vertexInputInfo.pVertexAttributeDescriptions = null;
+				vertexInputInfo.pVertexBindingDescriptions = null;
 			}
-			fixed (VkVertexInputBindingDescription* pBD = &bindingDescriptions[0])
+			else
 			{
-				vertexInputInfo.pVertexBindingDescriptions = pBD;
+				vertexInputInfo.vertexAttributeDescriptionCount = (uint)attributeDescriptions.Length;
+				vertexInputInfo.vertexBindingDescriptionCount = (uint)bindingDescriptions.Length;
+				fixed (VkVertexInputAttributeDescription* pAD = &attributeDescriptions[0])
+				{
+					vertexInputInfo.pVertexAttributeDescriptions = pAD;
+				}
+				fixed (VkVertexInputBindingDescription* pBD = &bindingDescriptions[0])
+				{
+					vertexInputInfo.pVertexBindingDescriptions = pBD;
+				}
 			}
 
  			VkGraphicsPipelineCreateInfo pipelineInfo = new();
@@ -233,6 +246,8 @@ namespace TestVulkan
 			configInfo.DynamicStateInfo.dynamicStateCount = (uint)configInfo.DynamicStateEnables.Length;
 			configInfo.DynamicStateInfo.flags = 0;
 
+			configInfo.BindingDescriptions = VertexT.GetBindingDescriptions();
+			configInfo.AttributeDescriptions = VertexT.GetAttributeDescriptions();
 		}
 
 		public void Bind(VkCommandBuffer commandBuffer) 

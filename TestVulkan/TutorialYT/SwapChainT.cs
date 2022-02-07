@@ -6,7 +6,7 @@ namespace TestVulkan
 {
 	public class SwapChainT
 	{
-		public static readonly int MAX_FRAMES_IN_FLIGHT = 2;
+		public static readonly uint MAX_FRAMES_IN_FLIGHT = 2;
 
 		private DeviceT Device;
 		private VkExtent2D WindowExtent;
@@ -167,7 +167,7 @@ namespace TestVulkan
 
 			VkResult result = VulkanNative.vkQueuePresentKHR(Device.PresentQueue, &presentInfo);
 
-			CurrentFrame = (CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+			CurrentFrame = (CurrentFrame + 1) % (int)MAX_FRAMES_IN_FLIGHT;
 
 			return result;
 		}

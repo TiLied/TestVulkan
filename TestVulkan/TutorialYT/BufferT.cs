@@ -156,17 +156,21 @@ namespace TestVulkan
 		{
 			if (size == VulkanNative.VK_WHOLE_SIZE)
 			{
-				Marshal.StructureToPtr(data, (IntPtr)Mapped, false);
+				var asd = new GlobalUbo[1] { data };
+				asd.AsSpan().CopyTo(new Span<GlobalUbo>((void*)Mapped, asd.Length));
+				//Marshal.StructureToPtr(data, (IntPtr)Mapped, false);
 
 				//memcpy(mapped, data, bufferSize);
 			}
 			else
 			{
-				//Marshal.StructureToPtr(data, (IntPtr)Mapped, false);
 				IntPtr memOffset = (IntPtr)Mapped;
 				var memOffset1 = memOffset.ToInt64();
 				memOffset1 += (long)offset;
-				Marshal.StructureToPtr(data, (IntPtr)memOffset1, false);
+				//Marshal.StructureToPtr(data, (IntPtr)memOffset1, false);
+				//test! works!
+				var asd = new GlobalUbo[1] { data };
+				asd.AsSpan().CopyTo(new Span<GlobalUbo>((void*)memOffset1, asd.Length));
 				//memcpy(memOffset, data, size);
 			}
 		}
@@ -220,7 +224,7 @@ namespace TestVulkan
  *
  * @return VkDescriptorBufferInfo of specified offset and range
  */
-		unsafe public VkDescriptorBufferInfo DescriptorInfo(ulong size, ulong offset)
+		unsafe public VkDescriptorBufferInfo DescriptorInfo(ulong size = VulkanNative.VK_WHOLE_SIZE, ulong offset = 0)
 		{
 			return new VkDescriptorBufferInfo()
 			{

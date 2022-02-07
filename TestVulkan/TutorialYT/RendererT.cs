@@ -138,7 +138,7 @@ namespace TestVulkan
 				throw new Exception("Fail to present");
 
 			IsFrameStarted = false;
-			CurrentFrameIndex = (CurrentFrameIndex + 1) % SwapChainT.MAX_FRAMES_IN_FLIGHT;
+			CurrentFrameIndex = (CurrentFrameIndex + 1) % (int)SwapChainT.MAX_FRAMES_IN_FLIGHT;
 		}
 
 		unsafe public void BeginSwapChainRenderPass(VkCommandBuffer commandBuffer) 

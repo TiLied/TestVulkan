@@ -106,19 +106,35 @@ namespace TestVulkan
 		}
 	}
 
+	public struct PointLightComponent 
+	{
+		public float lightIntensity = 1.0f;
+	}
+
 	public class GameObjectT
 	{
 		static public int IdT = 0;
+		static public Dictionary<int, GameObjectT> Map = new();
+
 		public int Id;
 
 		public ModelT Model;
 		public Vector3 Color;
 		public TransformComponent Transform;
+
+		public PointLightComponent? PointLight = null;
+
 		public GameObjectT()
 		{
 			Id = IdT++;
 		}
-
+		public GameObjectT(Vector3? color, float intensity = 10.0f, float radius = 0.1f)
+		{
+			Id = IdT++;
+			Color = (Vector3)color;
+			Transform.Scale.X = radius;
+			PointLight = new PointLightComponent() { lightIntensity = intensity };
+		}
 		public void CreateGameObject() { }
 
 		public int GetId() 
