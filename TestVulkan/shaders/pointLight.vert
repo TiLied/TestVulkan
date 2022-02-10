@@ -14,15 +14,14 @@ layout(location = 0) out vec2 fragOffset;
 struct PointLight{
 	vec4 position;
 	vec4 color;
-
 };
 
 layout(set = 0, binding = 0) uniform GlobalUbo{
 	mat4 projectionMatrix;
 	mat4 viewMatrix;
 	vec4 ambientLightColor;
-	PointLight pointLights[10];
 	int numLights;
+	PointLight pointLights[10];
 } ubo;
 
 layout (push_constant) uniform Push{

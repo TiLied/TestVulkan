@@ -3,6 +3,7 @@ using SDL2;
 using System;
 using System.Diagnostics;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace TestVulkan
@@ -35,8 +36,12 @@ namespace TestVulkan
 			LoadGameObjects();
 		}
 
-		public void Run() 
+		unsafe public void Run() 
 		{
+			var asd = Marshal.SizeOf<PointLight>();
+			var asd2 = Marshal.SizeOf<GlobalUbo>();
+			var asd3 = Marshal.SizeOf<GlobalUboBase>();
+
 			BufferT[] uboBuffers = new BufferT[SwapChainT.MAX_FRAMES_IN_FLIGHT];
 			for (int i = 0; i < uboBuffers.Length; i++)
 			{
@@ -85,11 +90,8 @@ namespace TestVulkan
 				//long newTime = DateTime.Now.Ticks;
 				//float frameTime = (float)(TimeSpan.FromTicks(newTime).TotalSeconds - TimeSpan.FromTicks(currentTime).TotalSeconds);
 				//currentTime = newTime;
-				float time = sw.ElapsedTicks;
-				float frameTime = (time - lastTime) / 10000000.0f;
-				lastTime = time;
 
-				if (SDL.SDL_PollEvent(out SDL.SDL_Event test_event) != 0)
+				while (SDL.SDL_PollEvent(out SDL.SDL_Event test_event) != 0)
 				{
 					if (test_event.window.windowEvent == SDL.SDL_WindowEventID.SDL_WINDOWEVENT_CLOSE || test_event.type == SDL.SDL_EventType.SDL_QUIT)
 					{
@@ -136,6 +138,10 @@ namespace TestVulkan
 					cameraController.MovePlaneXZ2(ref test_event, ref viewerObject);
 				}
 
+				float time = sw.ElapsedTicks;
+				float frameTime = (time - lastTime) / 10000000.0f;
+				lastTime = time;
+
 				cameraController.MovePlaneXZ3(frameTime, ref viewerObject);
 				camera.SetViewYXZ(viewerObject.Transform.Translation, viewerObject.Transform.Rotation);
 				
@@ -159,6 +165,11 @@ namespace TestVulkan
 					GlobalUbo ubo = new();
 					ubo.Projection = camera.GetProjection;
 					ubo.View = camera.GetView;
+					//PointLight[] bytes = new PointLight[10];
+					//fixed (PointLight* ptr = bytes)
+					//{
+					//	ubo.PointLights = ptr;
+					//}
 					pointLightSystem.Update(ref frameInfo, ref ubo);
 					uboBuffers[frameIndex].WriteToBufferU(ref ubo);
 					uboBuffers[frameIndex].Flush();
@@ -219,8 +230,26 @@ namespace TestVulkan
 
 			GameObjectT.Map.Add(gameObjectFloor.GetId(), gameObjectFloor);
 
-			GameObjectT pointLight = new(Vector3.One, 0.2f);
-			GameObjectT.Map.Add(pointLight.GetId(), pointLight);
+			Vector3[] lightColors = new Vector3[6] 
+			{
+				new Vector3(1.0f, 0.1f, 0.1f),
+				new Vector3(0.1f, 0.1f, 1.0f),
+				new Vector3(0.1f, 1.0f, 0.1f),
+				new Vector3(1.0f, 1.0f, 0.1f),
+				new Vector3(0.1f, 1.0f, 1.0f),
+				new Vector3(1.0f, 1.0f, 1.0f)
+			};
+
+			for (int i = 0; i < lightColors.Length; i++)
+			{
+				GameObjectT pointLight = new(Vector3.One, 0.2f);
+				pointLight.Color = lightColors[i];
+				Matrix4x4 rotateLight = Matrix4x4.CreateRotationY(i * (MathF.PI * 2) / lightColors.Length, -Vector3.UnitY);
+				pointLight.Transform.Translation = Vector3.Transform(new Vector3(-1.0f, -1.0f, -1.0f), rotateLight);
+				GameObjectT.Map.Add(pointLight.GetId(), pointLight);
+			}
+
+
 		}
 
 		unsafe public void Destroy() 

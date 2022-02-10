@@ -14,17 +14,30 @@ namespace TestVulkan
 	}
 
 	[StructLayout(LayoutKind.Explicit)]
-	public struct GlobalUbo
+	unsafe public struct GlobalUboBase
 	{
 		[FieldOffset(0)]
 		public Matrix4x4 Projection = Matrix4x4.Identity;
 		[FieldOffset(64)]
 		public Matrix4x4 View = Matrix4x4.Identity;
-		[FieldOffset(64 + 64)]
+		[FieldOffset(128)]
 		public Vector4 AmbientColor = new(1.0f, 1.0f, 1.0f, 0.02f);
-		[FieldOffset(64 + 64 + 16)]
-		public PointLight[] PointLights = new PointLight[10];
-		[FieldOffset(64 + 64 + 16 + 16 + 16)]
+		[FieldOffset(128 + 16)]
+		public int NumLights;
+	}
+
+	[StructLayout(LayoutKind.Explicit)]
+	unsafe public struct GlobalUbo
+	{
+		[FieldOffset(0)]
+		public Matrix4x4 Projection = Matrix4x4.Identity;
+		[FieldOffset(64)]
+		public Matrix4x4 View = Matrix4x4.Identity;
+		[FieldOffset(128)]
+		public Vector4 AmbientColor = new(1.0f, 1.0f, 1.0f, 0.02f);
+		[FieldOffset(128 + 16)]
+		public PointLight[] PointLights = new PointLight[FirstAppT.MAX_LIGHTS];
+		[FieldOffset(128 + 16 + (32 * 10) + 8)]
 		public int NumLights;
 	}
 

@@ -35,13 +35,6 @@ namespace TestVulkan
 
 		public void MovePlaneXZ(ref SDL.SDL_Event sdlEvent, float dt, ref GameObjectT gameObject)
 		{
-			//Everything is kinda wrong, not sure what is wrong, but changed calc dt like here 
-			//https://stackoverflow.com/questions/41742142/limiting-fps-in-c
-			//because if doing like in tutorial, it didn't work with mailbox.
-			//maybe it's my problem, I mess up something :(
-			//
-			//Probably because of Matrices in c#!!!!
-
 			if (sdlEvent.key.repeat == 1)
 				return;
 

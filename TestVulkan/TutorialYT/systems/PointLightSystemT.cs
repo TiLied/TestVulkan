@@ -26,8 +26,10 @@ namespace TestVulkan
 			CreatePipeline(renderPass);
 		}
 
-		public void Update(ref FrameInfo frameInfo, ref GlobalUbo ubo) 
+		unsafe public void Update(ref FrameInfo frameInfo, ref GlobalUbo ubo) 
 		{
+			Matrix4x4 rotateLight = Matrix4x4.CreateRotationY(frameInfo.FrameTime, -Vector3.UnitY);
+
 			int lightIndex = 0;
 			foreach (KeyValuePair<int,GameObjectT> keyValue in GameObjectT.Map)
 			{
@@ -35,10 +37,13 @@ namespace TestVulkan
 				if(obj.PointLight == null)
 					continue;
 
+				//update
+				obj.Transform.Translation = Vector3.Transform(obj.Transform.Translation, rotateLight);
+
 				//copy
 				ubo.PointLights[lightIndex].Position = new Vector4(obj.Transform.Translation,1.0f);
 				ubo.PointLights[lightIndex].Color = new Vector4(obj.Color, obj.PointLight.Value.lightIntensity);
-				lightIndex++;
+				lightIndex += 1;
 			}
 
 			ubo.NumLights = lightIndex;

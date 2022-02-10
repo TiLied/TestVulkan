@@ -156,9 +156,26 @@ namespace TestVulkan
 		{
 			if (size == VulkanNative.VK_WHOLE_SIZE)
 			{
-				var asd = new GlobalUbo[1] { data };
-				asd.AsSpan().CopyTo(new Span<GlobalUbo>((void*)Mapped, asd.Length));
-				//Marshal.StructureToPtr(data, (IntPtr)Mapped, false);
+				GlobalUboBase[] baseUbo = new GlobalUboBase[1];
+				baseUbo[0].View = data.View;
+				baseUbo[0].Projection = data.Projection;
+				baseUbo[0].NumLights = data.NumLights;
+				baseUbo[0].AmbientColor = data.AmbientColor;
+
+				baseUbo.AsSpan().CopyTo(new Span<GlobalUboBase>(Mapped, baseUbo.Length));
+
+				PointLight[] basePL = new PointLight[FirstAppT.MAX_LIGHTS];
+				for (int i = 0; i < FirstAppT.MAX_LIGHTS; i++)
+				{
+					basePL[i].Color = data.PointLights[i].Color;
+					basePL[i].Position = data.PointLights[i].Position;
+				}
+
+				IntPtr memOffset = (IntPtr)Mapped;
+				long memOffset1 = memOffset.ToInt64();
+				memOffset1 += Marshal.SizeOf<GlobalUboBase>() + 12;
+
+				basePL.AsSpan().CopyTo(new Span<PointLight>((void*)memOffset1, basePL.Length));
 
 				//memcpy(mapped, data, bufferSize);
 			}
