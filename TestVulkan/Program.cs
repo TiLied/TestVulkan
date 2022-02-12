@@ -49,8 +49,11 @@ namespace TestVulkan
 			//VulkanTutorial v = new();
 			//v.Run();
 
-			FirstAppT v2 = new();
-			v2.Run();
+			//FirstAppT v2 = new();
+			//v2.Run();
+
+			MainVKG v3 = new();
+			v3.Run();
 
 			Console.ReadKey();
 		}

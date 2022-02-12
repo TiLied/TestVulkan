@@ -38,10 +38,7 @@ namespace TestVulkan
 
 		unsafe public void Run() 
 		{
-			var asd = Marshal.SizeOf<PointLight>();
-			var asd2 = Marshal.SizeOf<GlobalUbo>();
-			var asd3 = Marshal.SizeOf<GlobalUboBase>();
-
+			
 			BufferT[] uboBuffers = new BufferT[SwapChainT.MAX_FRAMES_IN_FLIGHT];
 			for (int i = 0; i < uboBuffers.Length; i++)
 			{
@@ -72,8 +69,8 @@ namespace TestVulkan
 			PointLightSystemT pointLightSystem = new(ref Device, Renderer.GetSwapchainRenderPass, globalSetLayout.GetDescriptorSetLayout);
 
 			CameraT camera = new();
-			camera.SetViewTarget(new Vector3(-1.0f, -2.0f, 2.0f), new Vector3(0.0f, 0.0f, 2.5f), null);
-
+			//camera.SetViewTarget(new Vector3(-1.0f, -2.0f, 2.0f), new Vector3(0.0f, 0.0f, -2.5f), null);
+			
 			GameObjectT viewerObject = new();
 			viewerObject.Transform.Translation.Z = -2.5f;
 			KeyboardMovementController cameraController = new();
@@ -147,8 +144,9 @@ namespace TestVulkan
 				
 				float aspect = Renderer.GetAspectRatio;
 				camera.SetPerspectiveProjection((MathF.PI * 5) / 18, aspect, 0.1f, 100.0f);
-				//camera.SetPerspectiveProjection(39.6f * (MathF.PI / 180), aspect, 0.1f, 10.0f);
-	
+				//camera.SetPerspectiveProjection(39.6f * (MathF.PI / 180), aspect, 0.1f, 100.0f);
+
+				//camera.SetOrthographicProjection(-aspect, aspect, -1, 1, -1, 10);
 				VkCommandBuffer? commandBuffer = Renderer.BeginFrame();
 				if (commandBuffer != null)
 				{
@@ -242,14 +240,56 @@ namespace TestVulkan
 
 			for (int i = 0; i < lightColors.Length; i++)
 			{
-				GameObjectT pointLight = new(Vector3.One, 0.2f);
+				GameObjectT pointLight = new(Vector3.One, 0.1f + (i/10f));
 				pointLight.Color = lightColors[i];
 				Matrix4x4 rotateLight = Matrix4x4.CreateRotationY(i * (MathF.PI * 2) / lightColors.Length, -Vector3.UnitY);
 				pointLight.Transform.Translation = Vector3.Transform(new Vector3(-1.0f, -1.0f, -1.0f), rotateLight);
 				GameObjectT.Map.Add(pointLight.GetId(), pointLight);
 			}
 
+			//test
+			BuilderT b = new();
+			b.Vertices = new VertexT[4]
+			{
+			new VertexT
+			{
+				Position = new Vector3(0f, 0f, 0f),
+				Color = new Vector3(1.0f, 0.0f, 0.0f),
+				Normal = new Vector3(0.0f, -1.0f, 0.0f)
+			},
+			new VertexT
+			{
+				Position = new Vector3(0f, 0.49026123963255896f, 0.0f),
+				Color = new Vector3(0.0f, 1.0f, 0.0f),
+				Normal = new Vector3(0.0f, -1.0f, 0.0f)
+			},
+			new VertexT
+			{
+				Position = new Vector3(0.8715755371245493f, 0.49026123963255896f, 0.0f),
+				Color = new Vector3(0.0f, 0.0f, 1.0f),
+				Normal = new Vector3(0.0f, -1.0f, 0.0f)
+			},
+			new VertexT
+			{
+				Position = new Vector3(0.8715755371245493f, 0f, 0.0f),
+				Color = new Vector3(1.0f, 1.0f, 1.0f),
+				Normal = new Vector3(0.0f, -1.0f, 0.0f)
+			}
+			};
+			b.Indices = new uint[6] 
+			{
+				0, 1, 2, 2, 3, 0,
+			};
 
+			model = new ModelT(ref Device, ref b);
+
+			GameObjectT gameObjectTest = new();
+			gameObjectTest.Model = model;
+
+			gameObjectTest.Transform.Translation = new Vector3(0f, -1f, 0f);
+			gameObjectTest.Transform.Scale = new Vector3(3f, 3f, 1f);
+
+			GameObjectT.Map.Add(gameObjectTest.GetId(), gameObjectTest);
 		}
 
 		unsafe public void Destroy() 
