@@ -417,7 +417,6 @@ namespace TestVulkan
 					PhysicalDeviceMemoryProperties physicalDeviceMemoryProperties;
 					_vk.GetPhysicalDeviceMemoryProperties(device, &physicalDeviceMemoryProperties);
 
-					//VulkanMemoryLocal = new(deviceProperties, physicalDeviceMemoryProperties);
 					VulkanMemoryLocal2 = new(deviceProperties, physicalDeviceMemoryProperties);
 					break;
 				}
@@ -2635,7 +2634,7 @@ namespace TestVulkan
 			_vk.DestroyImageView(Device, DepthImageView, null);
 			_vk.DestroyImage(Device, DepthImage, null);
 			_vk.FreeMemory(Device, DepthImageMemory, null);
-
+			
 			foreach (Framebuffer framebuffer in SwapChainFramebuffers)
 			{
 				_vk.DestroyFramebuffer(Device, framebuffer, null);
@@ -2659,7 +2658,8 @@ namespace TestVulkan
 			Parallel.For(0, SwapChainImages.Length, (i) =>
 			{
 				_vk.DestroyBuffer(Device, UniformBuffers[i], null);
-				_vk.FreeMemory(Device, UniformBuffersMemory[i], null);
+				//_vk.FreeMemory(Device, UniformBuffersMemory[i], null);
+				VulkanMemoryLocal2.FreeOne(ref _vk, ref Device, UniformBuffersChunks[i], UniformBuffersItems[i]);
 			});
 			/*
 			for (int i = 0; i < SwapChainImages.Length; i++)

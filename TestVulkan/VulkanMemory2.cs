@@ -10,18 +10,18 @@ namespace TestVulkan
 		//
 		//
 
-		//TODO add bufferImageGranularity! 
-
 		//Best Practices layer suggest threshold
 		private const ulong MinSizeOneAllocation = 262144;
 
-		private ulong DefaultSizeAllocationsDLB = 16;
+		private ulong DefaultSizeAllocationsDLBDivide = 16;
 
 		private ulong DefaultSizeAllocationsDivide = 4;
 
 		private ulong DefaultSizeOneAllocationsDLB = MinSizeOneAllocation;
 
 		private ulong DefaultSizeOneAllocations = MinSizeOneAllocation;
+
+		private ulong AdjacentOffset = 1;
 
 		private ConcurrentDictionary<uint, ConcurrentDictionary<int,VulkanMemoryChunk2>> MemoryIndices = new();
 
@@ -31,9 +31,11 @@ namespace TestVulkan
 
 		public VulkanMemory2(PhysicalDeviceProperties deviceProperties, PhysicalDeviceMemoryProperties physicalDeviceMemoryProperties)
 		{
+			Trace.WriteLine("Vulkan Memory 2 initialization");
+
 			MemoryProperties = physicalDeviceMemoryProperties;
 
-			DefaultSizeOneAllocationsDLB = physicalDeviceMemoryProperties.MemoryHeaps[0].Size / DefaultSizeAllocationsDLB;
+			DefaultSizeOneAllocationsDLB = physicalDeviceMemoryProperties.MemoryHeaps[0].Size / DefaultSizeAllocationsDLBDivide;
 
 			DefaultSizeOneAllocations = DefaultSizeOneAllocationsDLB / DefaultSizeAllocationsDivide;
 
@@ -59,6 +61,9 @@ namespace TestVulkan
 			if (DefaultSizeOneAllocationsDLB < MinSizeOneAllocation)
 				DefaultSizeOneAllocationsDLB = MinSizeOneAllocation;
 
+			//TODO! MaxSizeOneAllocation
+
+			AdjacentOffset = (ulong)MathF.Max(deviceProperties.Limits.BufferImageGranularity, deviceProperties.Limits.MinUniformBufferOffsetAlignment);
 		}
 
 		unsafe public VulkanMemoryItem2 BindImageOrBuffer(ref Vk vk, ref Device device, dynamic imageOrBuffer, MemoryPropertyFlags properties) 
@@ -87,19 +92,19 @@ namespace TestVulkan
 
 			foreach (KeyValuePair<int, VulkanMemoryChunk2> entry in _list)
 			{
-				if (entry.Value.FreeSpace > memRequirements.Size)
+				if (entry.Value.FreeSpace > _item.SizeWithAdjacentOffset)
 				{
-					ulong _size = memRequirements.Size;
+					ulong _size = _item.SizeWithAdjacentOffset;
 					if (entry.Value.Alignment < memRequirements.Alignment)
 					{
 						entry.Value.Alignment = memRequirements.Alignment;
 					}
 
-					double _divide;
-					if (memRequirements.Size > entry.Value.Alignment)
+					ulong _divide;
+					if (_item.SizeWithAdjacentOffset > entry.Value.Alignment)
 					{
-						_divide = memRequirements.Size / entry.Value.Alignment;
-						_size = (ulong)(entry.Value.Alignment * Math.Ceiling(_divide));
+						_divide = _item.SizeWithAdjacentOffset / entry.Value.Alignment;
+						_size = (ulong)(entry.Value.Alignment * MathF.Ceiling(_divide));
 					}
 					else
 					{
@@ -114,10 +119,10 @@ namespace TestVulkan
 					foreach (VulkanMemoryItem2 _item2 in entry.Value.VulkanMemoryItems)
 					{
 						//_item2.StartOffset = _sizeAll;
-						if (_item2.MemoryRequirements.Size > entry.Value.Alignment)
+						if (_item2.SizeWithAdjacentOffset > entry.Value.Alignment)
 						{
-							_divide = _item2.MemoryRequirements.Size / entry.Value.Alignment;
-							_sizeAll += (ulong)(entry.Value.Alignment * Math.Ceiling(_divide));
+							_divide = _item2.SizeWithAdjacentOffset / entry.Value.Alignment;
+							_sizeAll += (ulong)(entry.Value.Alignment * MathF.Ceiling(_divide));
 						}
 						else
 						{
@@ -145,7 +150,7 @@ namespace TestVulkan
 
 			_item.IdChunk = _chunck.IdChunk;
 			_item.StartOffset = 0;
-			_item.EndOffset = memRequirements.Size;
+			_item.EndOffset = _item.SizeWithAdjacentOffset;
 
 			_chunck.VulkanMemoryItems.Add(_item);
 
@@ -163,6 +168,8 @@ namespace TestVulkan
 
 			_vmi.IsFreed = false;
 			_vmi.MemoryRequirements = memRequirements;
+			_vmi.SizeWithAdjacentOffset = (memRequirements.Size + AdjacentOffset - 1) & ~(AdjacentOffset - 1);
+			//_vmi.SizeWithAdjacentOffset += AdjacentOffset;
 
 			return _vmi;
 		}
@@ -243,6 +250,7 @@ namespace TestVulkan
 
 		unsafe public void FreeOne(ref Vk vk, ref Device device, VulkanMemoryChunk2 chunk, VulkanMemoryItem2 item)
 		{
+			//TODO IF CHUNK IS NULL!
 			item.IsFreed = true;
 
 			foreach (VulkanMemoryItem2 mItem in chunk.VulkanMemoryItems)
@@ -287,30 +295,31 @@ namespace TestVulkan
 		}
 	}
 
-	unsafe public class VulkanMemoryChunk2
+	public class VulkanMemoryChunk2
 	{
-		public int IdChunk { get; set; }
+		public int IdChunk { get; set; } = 0;
 
-		public DeviceMemory DeviceMemory { get; set; }
+		public DeviceMemory DeviceMemory { get; set; } = new();
 
 		public ulong Alignment { get; set; } = new();
 
-		public ulong Size { get; set; }
+		public ulong Size { get; set; } = 0;
 
-		public ulong FreeSpace { get; set; }
-
-		public ulong SumOffset { get; set; } = 0;
+		public ulong FreeSpace { get; set; } = 0;
 
 		public bool IsFreed { get; set; } = false;
 
 		public ConcurrentBag<VulkanMemoryItem2> VulkanMemoryItems { get; set; } = new();
 	}
 
-	public class VulkanMemoryItem2
+	public struct VulkanMemoryItem2
 	{
-		public int IdChunk { get; set; }
+		public int IdChunk { get; set; } = 0;
 
-		public MemoryRequirements MemoryRequirements;
+		public MemoryRequirements MemoryRequirements { get; set; } = new();
+
+		public ulong SizeWithAdjacentOffset { get; set; } = 0;
+
 		public ulong StartOffset { get; set; } = 0;
 
 		public ulong EndOffset { get; set; } = 0;
