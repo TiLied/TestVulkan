@@ -169,6 +169,7 @@ namespace TestVulkan
 			_vmi.IsFreed = false;
 			_vmi.MemoryRequirements = memRequirements;
 			_vmi.SizeWithAdjacentOffset = (memRequirements.Size + AdjacentOffset - 1) & ~(AdjacentOffset - 1);
+			//TODO? Uncomment?
 			//_vmi.SizeWithAdjacentOffset += AdjacentOffset;
 
 			return _vmi;
@@ -267,10 +268,9 @@ namespace TestVulkan
 			chunk.IsFreed = true;
 			foreach (KeyValuePair<uint, ConcurrentDictionary<int, VulkanMemoryChunk2>> entry in MemoryIndices)
 			{
-				VulkanMemoryChunk2 value2;
-				if (entry.Value.TryRemove(chunk.IdChunk, out value2))
+				if (entry.Value.TryRemove(chunk.IdChunk, out _))
 				{
-					Console.WriteLine("!!!!!");
+					Console.WriteLine("Free memory!!!");
 					return;
 				}
 				else
@@ -312,7 +312,7 @@ namespace TestVulkan
 		public ConcurrentBag<VulkanMemoryItem2> VulkanMemoryItems { get; set; } = new();
 	}
 
-	public struct VulkanMemoryItem2
+	public class VulkanMemoryItem2
 	{
 		public int IdChunk { get; set; } = 0;
 

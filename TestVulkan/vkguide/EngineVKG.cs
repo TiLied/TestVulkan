@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.KHR;
 using Silk.NET.Core;
+using System.Numerics;
 
 namespace TestVulkan
 {
@@ -21,6 +22,8 @@ namespace TestVulkan
 		private KhrSwapchain? _vkSwapchain;
 
 		private Queue<Action> deletors = new();
+
+		private VulkanMemory2 memory2;
 
 		public bool _isInitialized = false;
 		public int _frameNumber = 0;
@@ -64,6 +67,24 @@ namespace TestVulkan
 		public Pipeline _redTrianglePipeline;
 		
 		public int _selectedShader = 0;
+
+		public PipelineLayout _meshPipelineLayout;
+		public Pipeline _meshPipeline;
+
+		public MeshVKG _triangleMesh;
+		public MeshVKG _monkeyMesh;
+
+		public ImageView _depthImageView;
+		public AllocatedImageVKG _depthImage;
+
+		//the format for the depth image
+		public Format _depthFormat;
+
+		//default array of renderable objects
+		public List<RenderObjectVKG> _renderables = new();
+
+		public Dictionary<string, MaterialVKG> _materials = new();
+		public Dictionary<string, MeshVKG> _meshes = new();
 
 		private readonly string[] DeviceExtensions = new string[] { "VK_KHR_swapchain" };
 		private readonly string[] ValidationLayers = new string[] { "VK_LAYER_KHRONOS_validation", "VK_LAYER_LUNARG_monitor" };
@@ -114,6 +135,10 @@ namespace TestVulkan
 
 			InitPipelines();
 
+			LoadMeshes();
+
+			InitScene();
+
 			//everything went fine
 			_isInitialized = true;
 		}
@@ -124,13 +149,15 @@ namespace TestVulkan
 			if (_isInitialized)
 			{
 				//make sure the GPU has stopped doing its things
-				_vk.WaitForFences(_device, 1, in _renderFence, true, 1000000000);
+				_vk.DeviceWaitIdle(_device);
 
 				deletors.Reverse();
 				foreach (Action action in deletors) 
 				{
 					action.Invoke();
 				}
+
+				memory2.FreeAll(ref _vk, ref _device);
 
 				_vkSurface.DestroySurface(_instance, _surface, null);
 
@@ -190,9 +217,14 @@ namespace TestVulkan
 			}
 
 			//make a clear-color from frame number. This will flash with a 120*pi frame period.
-			ClearValue clearValue;
+			ClearValue clearValue = new();
 			float flash = MathF.Abs(MathF.Sin(_frameNumber / 120.0f));
 			clearValue.Color = new ClearColorValue(0.0f, 0.0f, flash, 1.0f);
+
+			//clear depth at 1
+			ClearValue depthClear = new();
+			depthClear.DepthStencil.Depth = 1.0f;
+
 
 			//start the main renderpass.
 			//We will use the clear color from above, and the framebuffer of the index the swapchain gave us
@@ -207,19 +239,51 @@ namespace TestVulkan
 			rpInfo.Framebuffer = _framebuffers[swapchainImageIndex];
 
 			//connect clear values
-			rpInfo.ClearValueCount = 1;
-			rpInfo.PClearValues = &clearValue;
+			rpInfo.ClearValueCount = 2;
+			ClearValue[] clearValues = new ClearValue[2] 
+			{
+				clearValue,
+				depthClear
+			};
+			fixed (ClearValue* clearValuesPtr = &clearValues[0]) 
+			{
+				rpInfo.PClearValues = clearValuesPtr;
+			}
 
 			_vk.CmdBeginRenderPass(cmd, in rpInfo, SubpassContents.Inline);
 
 			//once we start adding rendering commands, they will go here
+			/*
+			_vk.CmdBindPipeline(cmd, PipelineBindPoint.Graphics, _meshPipeline);
 
-			if (_selectedShader == 0)
-				_vk.CmdBindPipeline(cmd, PipelineBindPoint.Graphics, _trianglePipeline);
-			else
-				_vk.CmdBindPipeline(cmd, PipelineBindPoint.Graphics, _redTrianglePipeline);
+			//bind the mesh vertex buffer with offset 0
+			ulong offset = 0;
+			_vk.CmdBindVertexBuffers(cmd, 0, 1, in _monkeyMesh._vertexBuffer._buffer,in offset);
 
-			_vk.CmdDraw(cmd, 3, 1, 0, 0);
+
+			//make a model view matrix for rendering the object
+			//camera position
+			Vector3 camPos = new(0.0f, 0.0f, -2.0f);
+
+			Matrix4x4 view = Matrix4x4.CreateTranslation(camPos);
+
+			//camera projection
+			Matrix4x4 projection = Matrix4x4.CreatePerspectiveFieldOfView(70 * (MathF.PI / 180), 1700.0f / 900.0f, 0.1f, 200.0f);
+			projection.M22 *= -1;
+			//model rotation
+			Matrix4x4 model = Matrix4x4.CreateRotationY((_frameNumber * 0.4f) * (MathF.PI / 180));
+
+			//calculate final mesh matrix
+			Matrix4x4 mesh_matrix = model * view * projection;
+
+			MeshPushConstantsVKG constants = new();
+			constants.render_matrix = mesh_matrix;
+
+			//upload the matrix to the GPU via push constants
+			_vk.CmdPushConstants(cmd, _meshPipelineLayout, ShaderStageFlags.ShaderStageVertexBit, 0, (uint)Marshal.SizeOf<MeshPushConstantsVKG>(),ref constants);
+			*/
+
+			DrawObjects(ref cmd, ref _renderables, _renderables.Count);
 
 			//finalize the render pass
 			_vk.CmdEndRenderPass(cmd);
@@ -484,6 +548,11 @@ namespace TestVulkan
 			_vk.GetDeviceQueue(_device, indices.GraphicsFamily, 0, out _graphicsQueue);
 			_graphicsQueueFamily = indices.GraphicsFamily;
 
+			PhysicalDeviceMemoryProperties physicalDeviceMemoryProperties;
+			_vk.GetPhysicalDeviceMemoryProperties(_chosenGPU, &physicalDeviceMemoryProperties);
+
+			memory2 = new(deviceProperties, physicalDeviceMemoryProperties);
+
 			_vk.GetDeviceQueue(_device, indices.PresentFamily, 0, out PresentQueue);
 		}
 
@@ -595,7 +664,39 @@ namespace TestVulkan
 					throw new Exception("failed to create texture image view!");
 				}
 			}
-		
+
+			//depth image size will match the window
+			Extent3D depthImageExtent = new(_windowExtent.Width, _windowExtent.Height, 1);
+
+			//hardcoding the depth format to 32 bit float
+			_depthFormat = Format.D32Sfloat;
+
+			//the depth image will be an image with the format we selected and Depth Attachment usage flag
+			ImageCreateInfo dimg_info = InitializersVKG.ImageCreateInfo(_depthFormat, ImageUsageFlags.ImageUsageDepthStencilAttachmentBit, depthImageExtent);
+
+			if (_vk.CreateImage(_device, in dimg_info, null, out _depthImage._image) != Result.Success)
+			{
+				throw new Exception("failed to create image!");
+			}
+
+			_depthImage._allocation = memory2.BindImageOrBuffer(ref _vk, ref _device, _depthImage._image, MemoryPropertyFlags.MemoryPropertyDeviceLocalBit);
+
+
+			//build an image-view for the depth image to use for rendering
+			ImageViewCreateInfo dview_info = InitializersVKG.ImageviewCreateInfo(_depthFormat, _depthImage._image, ImageAspectFlags.ImageAspectDepthBit);
+
+			if (_vk.CreateImageView(_device,in dview_info, null, out _depthImageView) != Result.Success)
+				throw new Exception("failed to create texture image view!");
+
+			//add to deletion queues
+			deletors.Enqueue(new Action(() =>
+			{
+				_vk.DestroyImageView(_device, _depthImageView, null);
+
+				VulkanMemoryChunk2 chunk = memory2.ReturnChunk(_depthImage._allocation);
+				_vk.DestroyImage(_device, _depthImage._image, null);
+				memory2.FreeOne(ref _vk, ref _device, chunk, _depthImage._allocation);
+			}));
 		}
 
 		unsafe private void InitCommands() 
@@ -650,21 +751,81 @@ namespace TestVulkan
 			color_attachment_ref.Attachment = 0;
 			color_attachment_ref.Layout = ImageLayout.AttachmentOptimal;
 
+			AttachmentDescription depth_attachment = new();
+			// Depth attachment
+			depth_attachment.Flags = 0;
+			depth_attachment.Format = _depthFormat;
+			depth_attachment.Samples = SampleCountFlags.SampleCount1Bit;
+			depth_attachment.LoadOp = AttachmentLoadOp.Clear;
+			depth_attachment.StoreOp = AttachmentStoreOp.Store;
+			depth_attachment.StencilLoadOp = AttachmentLoadOp.Clear;
+			depth_attachment.StencilStoreOp = AttachmentStoreOp.DontCare;
+			depth_attachment.InitialLayout = ImageLayout.Undefined;
+			depth_attachment.FinalLayout = ImageLayout.DepthStencilAttachmentOptimal;
+
+			AttachmentReference depth_attachment_ref = new();
+			depth_attachment_ref.Attachment = 1;
+			depth_attachment_ref.Layout = ImageLayout.DepthStencilAttachmentOptimal;
+
 			//we are going to create 1 subpass, which is the minimum you can do
 			SubpassDescription subpass = new();
 			subpass.PipelineBindPoint = PipelineBindPoint.Graphics;
 			subpass.ColorAttachmentCount = 1;
 			subpass.PColorAttachments = &color_attachment_ref;
+			//hook the depth attachment into the subpass
+			subpass.PDepthStencilAttachment = &depth_attachment_ref;
+
+			//array of 2 attachments, one for the color, and other for depth
+			AttachmentDescription[] attachments = new AttachmentDescription[2] 
+			{ 
+				color_attachment, 
+				depth_attachment 
+			};
 
 			RenderPassCreateInfo render_pass_info = new();
 			render_pass_info.SType = StructureType.RenderPassCreateInfo;
 
 			//connect the color attachment to the info
-			render_pass_info.AttachmentCount = 1;
-			render_pass_info.PAttachments = &color_attachment;
+			render_pass_info.AttachmentCount = (uint)attachments.Length;
+
+			fixed (AttachmentDescription* attachmentsPtr = &attachments[0]) 
+			{
+				render_pass_info.PAttachments = attachmentsPtr;
+			}
+
 			//connect the subpass to the info
 			render_pass_info.SubpassCount = 1;
 			render_pass_info.PSubpasses = &subpass;
+
+			//1 dependency, which is from "outside" into the subpass. And we can read or write color
+			SubpassDependency dependency = new();
+			dependency.SrcSubpass = Vk.SubpassExternal;
+			dependency.DstSubpass = 0;
+			dependency.SrcStageMask = PipelineStageFlags.PipelineStageColorAttachmentOutputBit;
+			dependency.SrcAccessMask = 0;
+			dependency.DstStageMask = PipelineStageFlags.PipelineStageColorAttachmentOutputBit;
+			dependency.DstAccessMask = AccessFlags.AccessColorAttachmentWriteBit;
+
+			//dependency from outside to the subpass, making this subpass dependent on the previous renderpasses
+			SubpassDependency depth_dependency = new();
+			depth_dependency.SrcSubpass = Vk.SubpassExternal;
+			depth_dependency.DstSubpass = 0;
+			depth_dependency.SrcStageMask = PipelineStageFlags.PipelineStageEarlyFragmentTestsBit| PipelineStageFlags.PipelineStageLateFragmentTestsBit;
+			depth_dependency.SrcAccessMask = 0;
+			depth_dependency.DstStageMask = PipelineStageFlags.PipelineStageEarlyFragmentTestsBit | PipelineStageFlags.PipelineStageLateFragmentTestsBit;
+			depth_dependency.DstAccessMask = AccessFlags.AccessDepthStencilAttachmentWriteBit;
+
+			SubpassDependency[] dependencies = new SubpassDependency[2] 
+			{ 
+				dependency, 
+				depth_dependency
+			};
+
+			render_pass_info.DependencyCount = (uint)dependencies.Length;
+			fixed (SubpassDependency* dependenciesPtr = &dependencies[0])
+			{
+				render_pass_info.PDependencies = dependenciesPtr;
+			}
 
 			if (_vk.CreateRenderPass(_device, &render_pass_info, null, out _renderPass) != Result.Success)
 			{
@@ -697,10 +858,17 @@ namespace TestVulkan
 			//create framebuffers for each of the swapchain image views
 			for (int i = 0; i < swapchain_imagecount; i++)
 			{
-				fixed (ImageView* _swapchainImageView = &_swapchainImageViews[i])
+				ImageView[] attachments = new ImageView[2] 
+				{ 
+					_swapchainImageViews[i],
+					_depthImageView 
+				};
+
+				fixed (ImageView* attachmentsPtr = &attachments[0])
 				{
-					fb_info.PAttachments = _swapchainImageView;
+					fb_info.PAttachments = attachmentsPtr;
 				}
+				fb_info.AttachmentCount = (uint)attachments.Length;
 
 				if (_vk.CreateFramebuffer(_device, &fb_info, null, out _framebuffers[i]) != Result.Success)
 				{
@@ -806,13 +974,33 @@ namespace TestVulkan
 				throw new Exception("failed to Create Pipeline Layout!");
 			}
 
+			//we start from just the default empty pipeline layout info
+			PipelineLayoutCreateInfo mesh_pipeline_layout_info = InitializersVKG.PipelineLayoutCreateInfo();
+
+			//setup push constants
+			PushConstantRange push_constant;
+			//this push constant range starts at the beginning
+			push_constant.Offset = 0;
+			//this push constant range takes up the size of a MeshPushConstants struct
+			push_constant.Size = (uint)Marshal.SizeOf<MeshPushConstantsVKG>();
+			//this push constant range is accessible only in the vertex shader
+			push_constant.StageFlags = ShaderStageFlags.ShaderStageVertexBit;
+
+			mesh_pipeline_layout_info.PPushConstantRanges = &push_constant;
+			mesh_pipeline_layout_info.PushConstantRangeCount = 1;
+
+			if (_vk.CreatePipelineLayout(_device,in mesh_pipeline_layout_info, null,out _meshPipelineLayout) != Result.Success)
+			{
+				throw new Exception("failed to Create Pipeline Layout!");
+			}
+
 			//build the stage-create-info for both vertex and fragment stages. This lets the pipeline know the shader modules per stage
 			PipelineBuilderVKG pipelineBuilder = new();
 
 			pipelineBuilder._shaderStages = new PipelineShaderStageCreateInfo[2];
 
-			pipelineBuilder._shaderStages[0] = InitializersVKG.PipelineShaderStageCreateInfo(ShaderStageFlags.ShaderStageVertexBit, triangleVertexShader);
-			pipelineBuilder._shaderStages[1] = InitializersVKG.PipelineShaderStageCreateInfo(ShaderStageFlags.ShaderStageFragmentBit, triangleFragShader);
+			//pipelineBuilder._shaderStages[0] = InitializersVKG.PipelineShaderStageCreateInfo(ShaderStageFlags.ShaderStageVertexBit, triangleVertexShader);
+			//pipelineBuilder._shaderStages[1] = InitializersVKG.PipelineShaderStageCreateInfo(ShaderStageFlags.ShaderStageFragmentBit, triangleFragShader);
 
 			//vertex input controls how to read vertices from vertex buffers. We aren't using it yet
 			pipelineBuilder._vertexInputInfo = InitializersVKG.VertexInputStateCreateInfo();
@@ -844,17 +1032,66 @@ namespace TestVulkan
 			//use the triangle layout we created
 			pipelineBuilder._pipelineLayout = _trianglePipelineLayout;
 
-			//finally build the pipeline
-			_trianglePipeline = pipelineBuilder.BuildPipeline(_vk, _device, _renderPass);
+			//default depthtesting
+			pipelineBuilder._depthStencil = InitializersVKG.DepthStencilCreateInfo(true, true, CompareOp.LessOrEqual);
 
+			//finally build the pipeline
+			//_trianglePipeline = pipelineBuilder.BuildPipeline(_vk, _device, _renderPass);
+
+			/*
 			//add the other shaders
 			pipelineBuilder._shaderStages[0] = InitializersVKG.PipelineShaderStageCreateInfo(ShaderStageFlags.ShaderStageVertexBit, redTriangleVertShader);
 			pipelineBuilder._shaderStages[1] = InitializersVKG.PipelineShaderStageCreateInfo(ShaderStageFlags.ShaderStageFragmentBit, redTriangleFragShader);
 
 			//build the red triangle pipeline
 			_redTrianglePipeline = pipelineBuilder.BuildPipeline(_vk, _device, _renderPass);
+			*/
+			//build the mesh pipeline
+
+			VertexInputDescriptionVKG vertexDescription = VertexVKG.GetVertexSescription();
+
+			//connect the pipeline builder vertex input info to the one we get from Vertex
+			fixed (VertexInputAttributeDescription* pAD = &vertexDescription.attributes[0])
+			{
+				pipelineBuilder._vertexInputInfo.PVertexAttributeDescriptions = pAD;
+				pipelineBuilder._vertexInputInfo.VertexAttributeDescriptionCount = (uint)vertexDescription.attributes.Length;
+			}
+			fixed (VertexInputBindingDescription* pBD = &vertexDescription.bindings[0])
+			{
+				pipelineBuilder._vertexInputInfo.PVertexBindingDescriptions = pBD;
+				pipelineBuilder._vertexInputInfo.VertexBindingDescriptionCount = (uint)vertexDescription.bindings.Length;
+
+			}
+
+			//clear the shader stages for the builder
+			pipelineBuilder._shaderStages = new PipelineShaderStageCreateInfo[2];
+
+			//compile mesh vertex shader
+			ShaderModule meshVertShader = new();
+			if (!LoadShaderModule(Program.Directory + @"\TestVulkan\shaders\tri_meshV.spv",ref meshVertShader))
+			{
+				Trace.WriteLine("Error when building the meshVertShader vertex shader module");
+			}
+			else
+			{
+				Trace.WriteLine("meshVertShader vertex shader successfully loaded");
+			}
+
+			//add the other shaders
+			pipelineBuilder._shaderStages[0] = InitializersVKG.PipelineShaderStageCreateInfo(ShaderStageFlags.ShaderStageVertexBit, meshVertShader);
+
+			//make sure that triangleFragShader is holding the compiled colored_triangle.frag
+			pipelineBuilder._shaderStages[1] = InitializersVKG.PipelineShaderStageCreateInfo(ShaderStageFlags.ShaderStageFragmentBit, triangleFragShader);
+
+			pipelineBuilder._pipelineLayout = _meshPipelineLayout;
+
+			//build the mesh triangle pipeline
+			_meshPipeline = pipelineBuilder.BuildPipeline(_vk, _device, _renderPass);
+
+			CreateMaterial(_meshPipeline, _meshPipelineLayout, "defaultmesh");
 
 			//destroy all shader modules, outside of the queue
+			_vk.DestroyShaderModule(_device, meshVertShader, null);
 			_vk.DestroyShaderModule(_device, redTriangleVertShader, null);
 			_vk.DestroyShaderModule(_device, redTriangleFragShader, null);
 			_vk.DestroyShaderModule(_device, triangleFragShader, null);
@@ -862,13 +1099,106 @@ namespace TestVulkan
 
 			deletors.Enqueue(new Action(() =>
 			{
-				//destroy the 2 pipelines we have created
-				_vk.DestroyPipeline(_device, _redTrianglePipeline, null);
-				_vk.DestroyPipeline(_device, _trianglePipeline, null);
+				//destroy the 3 pipelines we have created
+				//_vk.DestroyPipeline(_device, _redTrianglePipeline, null);
+				//_vk.DestroyPipeline(_device, _trianglePipeline, null);
+				_vk.DestroyPipeline(_device, _meshPipeline, null);
 
 				//destroy the pipeline layout that they use
 				_vk.DestroyPipelineLayout(_device, _trianglePipelineLayout, null);
+				_vk.DestroyPipelineLayout(_device, _meshPipelineLayout, null);
 			}));
+		}
+
+		unsafe private void LoadMeshes() 
+		{
+			//make the array 3 vertices long
+			_triangleMesh._vertices = new VertexVKG[3];
+
+			//vertex positions
+			_triangleMesh._vertices[0].position = new Vector3(1.0f, 1.0f, 0.0f);
+			_triangleMesh._vertices[1].position = new Vector3(-1.0f, 1.0f, 0.0f);
+			_triangleMesh._vertices[2].position = new Vector3(0.0f,-1.0f, 0.0f);
+
+			//vertex colors, all green
+			_triangleMesh._vertices[0].color = new Vector3( 0.0f, 1.0f, 0.0f ); //pure green
+			_triangleMesh._vertices[1].color = new Vector3( 0.0f, 1.0f, 0.0f ); //pure green
+			_triangleMesh._vertices[2].color = new Vector3( 0.0f, 1.0f, 0.0f ); //pure green
+
+			//load the monkey
+			_monkeyMesh.LoadFromObj(Program.Directory + @"\TestVulkan\models\monkey_smooth.obj");
+
+			//make sure both meshes are sent to the GPU
+			UploadMesh(ref _triangleMesh);
+			UploadMesh(ref _monkeyMesh);
+
+			//note that we are copying them. Eventually we will delete the hardcoded _monkey and _triangle meshes, so it's no problem now.
+			_meshes["monkey"] = _monkeyMesh;
+			_meshes["triangle"] = _triangleMesh;
+
+			deletors.Enqueue(new Action(() =>
+			{
+				VulkanMemoryChunk2 chunk = memory2.ReturnChunk(_triangleMesh._vertexBuffer._allocation);
+				_vk.DestroyBuffer(_device, _triangleMesh._vertexBuffer._buffer, null);
+				memory2.FreeOne(ref _vk, ref _device, chunk, _triangleMesh._vertexBuffer._allocation);
+
+				chunk = memory2.ReturnChunk(_monkeyMesh._vertexBuffer._allocation);
+				_vk.DestroyBuffer(_device, _monkeyMesh._vertexBuffer._buffer, null);
+				memory2.FreeOne(ref _vk, ref _device, chunk, _monkeyMesh._vertexBuffer._allocation);
+			}));
+		}
+
+		private void InitScene() 
+		{
+			RenderObjectVKG monkey = new();
+			monkey.mesh = (MeshVKG)GetMesh("monkey");
+			monkey.material = (MaterialVKG)GetMaterial("defaultmesh");
+			monkey.transformMatrix = Matrix4x4.Identity;
+
+			_renderables.Add(monkey);
+
+			for (int x = -30; x <= 30; x++)
+			{
+				for (int y = -30; y <= 30; y++)
+				{
+					RenderObjectVKG tri;
+					tri.mesh = (MeshVKG)GetMesh("triangle");
+					tri.material = (MaterialVKG)GetMaterial("defaultmesh");
+
+					Matrix4x4 translation = Matrix4x4.CreateTranslation(new Vector3(x, 0, y));
+
+					Matrix4x4 scale = Matrix4x4.CreateScale(0.2f, 0.2f, 0.2f);
+					tri.transformMatrix = scale * translation;
+
+					_renderables.Add(tri);
+				}
+			}
+		}
+
+		unsafe private void UploadMesh(ref MeshVKG mesh) 
+		{
+			//allocate vertex buffer
+			BufferCreateInfo bufferInfo = new();
+			bufferInfo.SType = StructureType.BufferCreateInfo;
+			//this is the total size, in bytes, of the buffer we are allocating
+			bufferInfo.Size = (ulong)(mesh._vertices.Length * Marshal.SizeOf<VertexVKG>());
+			//this buffer is going to be used as a Vertex Buffer
+			bufferInfo.Usage = BufferUsageFlags.BufferUsageVertexBufferBit;
+
+			if (_vk.CreateBuffer(_device, in bufferInfo, null, out mesh._vertexBuffer._buffer) != Result.Success)
+			{
+				throw new Exception("failed to create vertex buffer!");
+			}
+
+			mesh._vertexBuffer._allocation = memory2.BindImageOrBuffer(ref _vk, ref _device, mesh._vertexBuffer._buffer, MemoryPropertyFlags.MemoryPropertyHostVisibleBit | MemoryPropertyFlags.MemoryPropertyHostCoherentBit);
+			VulkanMemoryChunk2 chunk = memory2.ReturnChunk(mesh._vertexBuffer._allocation);
+
+			void* data;
+			_vk.MapMemory(_device, chunk.DeviceMemory, mesh._vertexBuffer._allocation.StartOffset, (ulong)(mesh._vertices.Length * Marshal.SizeOf<VertexVKG>()), 0, &data);
+
+			mesh._vertices.AsSpan().CopyTo(new Span<VertexVKG>(data, mesh._vertices.Length));
+
+			_vk.UnmapMemory(_device, chunk.DeviceMemory);
 		}
 
 		unsafe private bool LoadShaderModule(string filePath, ref ShaderModule outShaderModule) 
@@ -900,6 +1230,92 @@ namespace TestVulkan
 			return true;
 		}
 
+		private MaterialVKG CreateMaterial(Pipeline pipeline, PipelineLayout layout, string name)
+		{
+			MaterialVKG mat = new();
+			mat.pipeline = pipeline;
+			mat.pipelineLayout = layout;
+
+			_materials.Add(name,mat);
+
+			return _materials[name];
+		}
+
+		private MaterialVKG? GetMaterial(string name)
+		{
+			//search for the object, and return nullptr if not found
+			if (!_materials.ContainsKey(name))
+			{
+				return null;
+			}
+			else 
+			{
+				return _materials[name];
+			}
+		}
+
+		private MeshVKG? GetMesh(string name)
+		{
+			if (!_meshes.ContainsKey(name)) 
+			{
+				return null;
+			}
+			else 
+			{
+				return _meshes[name];
+			}
+		}
+
+		private void DrawObjects(ref CommandBuffer cmd, ref List<RenderObjectVKG> first, int count)
+		{
+			//make a model view matrix for rendering the object
+			//camera view
+			Vector3 camPos = new Vector3(0.0f, -6.0f, -10.0f);
+
+			Matrix4x4 view = Matrix4x4.CreateTranslation(camPos);
+			//camera projection
+			Matrix4x4 projection = Matrix4x4.CreatePerspectiveFieldOfView(70 * (MathF.PI / 180), 1700.0f / 900.0f, 0.1f, 200.0f);
+			
+			projection.M22 *= -1;
+
+			MeshVKG? lastMesh = null;
+			MaterialVKG? lastMaterial = null;
+
+			for (int i = 0; i < count; i++)
+			{
+				RenderObjectVKG obj = first[i];
+
+				//only bind the pipeline if it doesn't match with the already bound one
+				if (!obj.material.Equals(lastMaterial))
+				{
+					_vk.CmdBindPipeline(cmd, PipelineBindPoint.Graphics, obj.material.Value.pipeline);
+					lastMaterial = obj.material;
+				}
+
+				Matrix4x4 model = obj.transformMatrix;
+				//final render matrix, that we are calculating on the cpu
+				Matrix4x4 mesh_matrix = model * view * projection;
+
+				MeshPushConstantsVKG constants = new();
+				constants.render_matrix = mesh_matrix;
+
+				//upload the mesh to the GPU via push constants
+				_vk.CmdPushConstants(cmd, obj.material.Value.pipelineLayout, ShaderStageFlags.ShaderStageVertexBit, 0, (uint)Marshal.SizeOf<MeshPushConstantsVKG>(), ref constants);
+
+				//only bind the mesh if it's a different one from last bind
+				if (!obj.mesh.Equals(lastMesh))
+				{
+					//bind the mesh vertex buffer with offset 0
+					ulong offset = 0;
+					_vk.CmdBindVertexBuffers(cmd, 0, 1, in obj.mesh._vertexBuffer._buffer, in offset);
+					lastMesh = obj.mesh;
+				}
+
+				//we can now draw
+				_vk.CmdDraw(cmd, (uint)obj.mesh._vertices.Length, 1, 0, 0);
+			}
+		}
+
 		private SurfaceFormatKHR ChooseSwapSurfaceFormat(SurfaceFormatKHR[] availableFormats)
 		{
 			SurfaceFormatKHR returnFormat = availableFormats[0];
@@ -922,7 +1338,7 @@ namespace TestVulkan
 			foreach (PresentModeKHR availablePresentMode in availablePresentModes)
 			{
 				Trace.WriteLine($"Available Swap Present Mode: {availablePresentMode}");
-				if (availablePresentMode == PresentModeKHR.PresentModeMailboxKhr)
+				if (availablePresentMode == PresentModeKHR.PresentModeFifoKhr)
 					returnPresentMode = availablePresentMode;
 			}
 			Trace.WriteLine($"Return Present Mode: {returnPresentMode}");
@@ -949,7 +1365,6 @@ namespace TestVulkan
 				return actualExtent;
 			}
 		}
-
 
 		unsafe private bool CheckValidationLayerSupport()
 		{
@@ -1209,6 +1624,32 @@ namespace TestVulkan
 				return GraphicsFamilyHasValue && PresentFamilyHasValue;
 			}
 		};
+
+		public struct MeshPushConstantsVKG
+		{
+			public Vector4 data;
+			public Matrix4x4 render_matrix;
+		};
+
+		//note that we store the VkPipeline and layout by value, not pointer.
+		//They are 64 bit handles to internal driver structures anyway so storing pointers to them isn't very useful
+
+
+		public struct MaterialVKG
+		{
+			public Pipeline pipeline;
+			public PipelineLayout pipelineLayout;
+		};
+
+		public struct RenderObjectVKG
+		{
+			public MeshVKG mesh;
+
+			public MaterialVKG? material;
+
+			public Matrix4x4 transformMatrix;
+		};
+
 	}
 
 	public class PipelineBuilderVKG
@@ -1222,6 +1663,7 @@ namespace TestVulkan
 		public PipelineColorBlendAttachmentState _colorBlendAttachment;
 		public PipelineMultisampleStateCreateInfo _multisampling;
 		public PipelineLayout _pipelineLayout;
+		public PipelineDepthStencilStateCreateInfo _depthStencil;
 
 		unsafe public Pipeline BuildPipeline(Vk _vk, Device device, RenderPass pass) 
 		{
@@ -1283,6 +1725,12 @@ namespace TestVulkan
 			fixed (PipelineMultisampleStateCreateInfo* _multisamplingPtr = &_multisampling)
 			{
 				pipelineInfo.PMultisampleState = _multisamplingPtr;
+			}
+
+			//other states
+			fixed (PipelineDepthStencilStateCreateInfo* _depthStencilPtr = &_depthStencil)
+			{
+				pipelineInfo.PDepthStencilState = _depthStencilPtr;
 			}
 			pipelineInfo.PColorBlendState = &colorBlending;
 			pipelineInfo.Layout = _pipelineLayout;

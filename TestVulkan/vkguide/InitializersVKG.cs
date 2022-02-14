@@ -160,5 +160,62 @@ namespace TestVulkan
 			return semCreateInfo;
 		}
 
+		unsafe public static ImageCreateInfo ImageCreateInfo(Format format, ImageUsageFlags usageFlags, Extent3D extent)
+		{
+			ImageCreateInfo info = new();
+			info.SType = StructureType.ImageCreateInfo;
+			info.PNext = null;
+
+			info.ImageType = ImageType.ImageType2D;
+
+			info.Format = format;
+			info.Extent = extent;
+
+			info.MipLevels = 1;
+			info.ArrayLayers = 1;
+			info.Samples = SampleCountFlags.SampleCount1Bit;
+			info.Tiling = ImageTiling.Optimal;
+			info.Usage = usageFlags;
+
+			return info;
+		}
+
+		unsafe public static ImageViewCreateInfo ImageviewCreateInfo(Format format, Image image, ImageAspectFlags aspectFlags)
+		{
+			//build a image-view for the depth image to use for rendering
+			ImageViewCreateInfo info = new();
+			info.SType = StructureType.ImageViewCreateInfo;
+			info.PNext = null;
+
+			info.ViewType = ImageViewType.ImageViewType2D;
+			info.Image = image;
+			info.Format = format;
+			info.SubresourceRange.BaseMipLevel = 0;
+			info.SubresourceRange.LevelCount = 1;
+			info.SubresourceRange.BaseArrayLayer = 0;
+			info.SubresourceRange.LayerCount = 1;
+			info.SubresourceRange.AspectMask = aspectFlags;
+
+			return info;
+		}
+
+		unsafe public static PipelineDepthStencilStateCreateInfo DepthStencilCreateInfo(bool bDepthTest, bool bDepthWrite, CompareOp compareOp)
+		{
+			PipelineDepthStencilStateCreateInfo info = new();
+			info.SType = StructureType.PipelineDepthStencilStateCreateInfo;
+			info.PNext = null;
+
+			info.DepthTestEnable = bDepthTest ? true : false;
+			info.DepthWriteEnable = bDepthWrite ? true : false;
+			info.DepthCompareOp = bDepthTest ? compareOp : CompareOp.Always;
+			info.DepthBoundsTestEnable = false;
+			info.MinDepthBounds = 0.0f; // Optional
+			info.MaxDepthBounds = 1.0f; // Optional
+			info.StencilTestEnable = false;
+
+			return info;
+		}
+
+
 	}
 }
