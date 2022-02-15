@@ -216,6 +216,36 @@ namespace TestVulkan
 			return info;
 		}
 
+		unsafe public static DescriptorSetLayoutBinding DescriptorsetLayoutBinding(DescriptorType type, ShaderStageFlags stageFlags, uint binding)
+		{
+			DescriptorSetLayoutBinding setbind = new();
 
+			setbind.Binding = binding;
+			setbind.DescriptorCount = 1;
+			setbind.DescriptorType = type;
+			setbind.PImmutableSamplers = null;
+			setbind.StageFlags = stageFlags;
+
+			return setbind;
+		}
+
+		unsafe public static WriteDescriptorSet WriteDescriptorBuffer(DescriptorType type, DescriptorSet dstSet,ref DescriptorBufferInfo bufferInfo, uint binding)
+		{
+			WriteDescriptorSet write = new();
+			write.SType = StructureType.WriteDescriptorSet;
+			write.PNext = null;
+
+			write.DstBinding = binding;
+			write.DstSet = dstSet;
+			write.DescriptorCount = 1;
+			write.DescriptorType = type;
+
+			fixed (DescriptorBufferInfo* bufferInfoPtr = &bufferInfo) 
+			{
+				write.PBufferInfo = bufferInfoPtr;
+			}
+
+			return write;
+		}
 	}
 }
