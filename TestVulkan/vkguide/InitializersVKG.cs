@@ -247,5 +247,74 @@ namespace TestVulkan
 
 			return write;
 		}
+
+		unsafe public static CommandBufferBeginInfo CommandBufferBeginInfo(CommandBufferUsageFlags flags = 0)
+		{
+			CommandBufferBeginInfo info = new();
+
+			info.SType = StructureType.CommandBufferBeginInfo;
+			info.PNext = null;
+
+			info.PInheritanceInfo = null;
+			info.Flags = flags;
+			
+			return info;
+		}
+
+		unsafe public static SubmitInfo SubmitInfo(ref CommandBuffer cmd)
+		{
+			SubmitInfo info = new();
+			info.SType = StructureType.SubmitInfo;
+			info.PNext = null;
+
+			info.WaitSemaphoreCount = 0;
+			info.PWaitSemaphores = null;
+			info.PWaitDstStageMask = null;
+			info.CommandBufferCount = 1;
+
+			fixed (CommandBuffer* cmdPtr = &cmd)
+			{
+				info.PCommandBuffers = cmdPtr;
+			}
+
+			info.SignalSemaphoreCount = 0;
+			info.PSignalSemaphores = null;
+
+			return info;
+		}
+
+		unsafe public static SamplerCreateInfo SamplerCreateInfo(Filter filters, SamplerAddressMode samplerAddressMode = SamplerAddressMode.Repeat)
+		{
+			SamplerCreateInfo info = new();
+			info.SType = StructureType.SamplerCreateInfo;
+			info.PNext = null;
+
+			info.MagFilter = filters;
+			info.MinFilter = filters;
+			info.AddressModeU = samplerAddressMode;
+			info.AddressModeV = samplerAddressMode;
+			info.AddressModeW = samplerAddressMode;
+
+			return info;
+		}
+
+		unsafe public static WriteDescriptorSet WriteDescriptorImage(DescriptorType type, DescriptorSet dstSet,ref DescriptorImageInfo imageInfo, uint binding)
+		{
+			WriteDescriptorSet write = new();
+			write.SType = StructureType.WriteDescriptorSet;
+			write.PNext = null;
+
+			write.DstBinding = binding;
+			write.DstSet = dstSet;
+			write.DescriptorCount = 1;
+			write.DescriptorType = type;
+
+			fixed (DescriptorImageInfo* imageInfoPtr = &imageInfo)
+			{
+				write.PImageInfo = imageInfoPtr;
+			}
+
+			return write;
+		}
 	}
 }

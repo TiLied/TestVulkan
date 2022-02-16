@@ -26,6 +26,7 @@ namespace TestVulkan
 		public Vector3 position;
 		public Vector3 normal;
 		public Vector3 color;
+		public Vector2 uv;
 
 		public static VertexInputDescriptionVKG GetVertexSescription() 
 		{
@@ -60,7 +61,20 @@ namespace TestVulkan
 			colorAttribute.Format = Format.R32G32B32Sfloat;
 			colorAttribute.Offset = (uint)Marshal.OffsetOf<VertexVKG>(nameof(color));
 
-			description.attributes = new VertexInputAttributeDescription[3] { positionAttribute, normalAttribute, colorAttribute };
+			//UV will be stored at Location 3
+			VertexInputAttributeDescription uvAttribute = new();
+			uvAttribute.Binding = 0;
+			uvAttribute.Location = 3;
+			uvAttribute.Format = Format.R32G32Sfloat;
+			uvAttribute.Offset = (uint)Marshal.OffsetOf<VertexVKG>(nameof(uv));
+
+			description.attributes = new VertexInputAttributeDescription[] 
+			{ 
+				positionAttribute, 
+				normalAttribute, 
+				colorAttribute,
+				uvAttribute
+			};
 
 			return description;
 		}
@@ -112,6 +126,12 @@ namespace TestVulkan
 					string[] vertexTextL = lines[indexT].Split(" ");
 					string[] vertexN = lines[indexN].Split(" ");
 
+					while (!vertexTextL[0].Contains("vt"))
+					{
+						indexT++;
+						vertexTextL = lines[indexT].Split(" ");
+					}
+
 					VertexVKG vertex;
 
 					vertex.position = new Vector3()
@@ -149,6 +169,13 @@ namespace TestVulkan
 					};
 
 					vertex.color = vertex.normal;
+
+					vertex.uv = new Vector2
+					{
+						X = float.Parse(vertexTextL[1], NumberStyles.Any, CultureInfo.InvariantCulture),
+						Y = 1.0f - float.Parse(vertexTextL[2], NumberStyles.Any, CultureInfo.InvariantCulture)
+					};
+
 					/*
 					if (vertexMapTrue.TryGetValue(vertex, out uint meshIndex))
 					{

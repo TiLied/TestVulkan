@@ -270,7 +270,7 @@ namespace TestVulkan
 			{
 				if (entry.Value.TryRemove(chunk.IdChunk, out _))
 				{
-					Console.WriteLine("Free memory!!!");
+					Console.WriteLine("Free chunk!!!");
 					return;
 				}
 				else

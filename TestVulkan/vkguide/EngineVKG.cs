@@ -11,7 +11,7 @@ namespace TestVulkan
 {
 	public class EngineVKG
 	{
-
+		private EngineVKG engine;
 #if Debug
 		private const bool EnableValidationLayers = false;
 #else
@@ -20,13 +20,13 @@ namespace TestVulkan
 
 		public const int FRAME_OVERLAP = 2;
 
-		private Vk _vk = Vk.GetApi();
+		public Vk _vk = Vk.GetApi();
 		private KhrSurface? _vkSurface;
 		private KhrSwapchain? _vkSwapchain;
 
-		private Queue<Action> deletors = new();
+		public Queue<Action> deletors = new();
 
-		private VulkanMemory2 memory2;
+		public VulkanMemory2 memory2;
 
 		public bool _isInitialized = false;
 		public int _frameNumber = 0;
@@ -95,6 +95,12 @@ namespace TestVulkan
 		public GPUSceneDataVKG _sceneParameters;
 		public AllocatedBufferVKG _sceneParameterBuffer;
 
+		public UploadContextVKG _uploadContext;
+
+		public Dictionary<string, TextureVKG> _loadedTextures = new();
+
+		public DescriptorSetLayout _singleTextureSetLayout;
+
 		private readonly string[] DeviceExtensions = new string[] { "VK_KHR_swapchain", "VK_KHR_shader_draw_parameters" };
 		private readonly string[] ValidationLayers = new string[] { "VK_LAYER_KHRONOS_validation", "VK_LAYER_LUNARG_monitor" };
 		
@@ -105,8 +111,13 @@ namespace TestVulkan
 		}
 
 		//initializes everything in the engine
-		public void Init() 
+		public void Init(ref EngineVKG engineVKG) 
 		{
+			//
+			//
+			//
+			engine = engineVKG;
+
 			// We initialize SDL and create a window with it. 
 			//SDL.SDL_Init(SDL.SDL_INIT_VIDEO);
 			if (SDL.SDL_Init(SDL.SDL_INIT_VIDEO) != 0)
@@ -145,6 +156,8 @@ namespace TestVulkan
 			InitDescriptors();
 
 			InitPipelines();
+
+			LoadImages();
 
 			LoadMeshes();
 
@@ -709,12 +722,36 @@ namespace TestVulkan
 				}
 			}
 
+			//
+			//
+			//
+			//
+			//
+			CommandPoolCreateInfo uploadCommandPoolInfo = InitializersVKG.CommandPoolCreateInfo(_graphicsQueueFamily);
+			//create pool for upload context
+			if (_vk.CreateCommandPool(_device, in uploadCommandPoolInfo, null, out _uploadContext._commandPool) != Result.Success)
+			{
+				throw new Exception("failed to Create Command Pool!");
+			}
+			
+			//allocate the default command buffer that we will use for the instant commands
+			CommandBufferAllocateInfo cmdAllocInfo2 = InitializersVKG.CommandBufferAllocateInfo(_uploadContext._commandPool, 1);
+
+			//???
+			CommandBuffer cmd;
+			if (_vk.AllocateCommandBuffers(_device, in cmdAllocInfo2, out _uploadContext._commandBuffer) != Result.Success)
+			{
+				throw new Exception("failed to Allocate Command Buffer!");
+			}
+
 			deletors.Enqueue(new Action(() =>
 			{
 				for (int i = 0; i < FRAME_OVERLAP; i++)
 				{
 					_vk.DestroyCommandPool(_device, _frames[i]._commandPool, null);
 				}
+
+				_vk.DestroyCommandPool(_device, _uploadContext._commandPool, null);
 			}));
 		}
 
@@ -905,12 +942,20 @@ namespace TestVulkan
 				}
 			}
 
+			FenceCreateInfo uploadFenceCreateInfo = InitializersVKG.FenceCreateInfo();
+			if (_vk.CreateFence(_device, in uploadFenceCreateInfo, null, out _uploadContext._uploadFence) != Result.Success)
+			{
+				throw new Exception("failed to Create Fence!");
+			}
+
 			deletors.Enqueue(new Action(() =>
 			{
 				for (int i = 0; i < FRAME_OVERLAP; i++)
 				{
 					_vk.DestroyFence(_device, _frames[i]._renderFence, null);
 				}
+
+				_vk.DestroyFence(_device, _uploadContext._uploadFence, null);
 			}));
 			deletors.Enqueue(new Action(() =>
 			{
@@ -929,7 +974,9 @@ namespace TestVulkan
 			{ 
 				new DescriptorPoolSize(DescriptorType.UniformBuffer, 10),
 				new DescriptorPoolSize(DescriptorType.UniformBufferDynamic, 10),
-				new DescriptorPoolSize(DescriptorType.StorageBuffer, 10)
+				new DescriptorPoolSize(DescriptorType.StorageBuffer, 10),
+				//add combined-image-sampler descriptor types to the pool
+				new DescriptorPoolSize(DescriptorType.CombinedImageSampler, 10)
 			};
 
 			DescriptorPoolCreateInfo pool_info = new();
@@ -982,16 +1029,32 @@ namespace TestVulkan
 
 			_vk.CreateDescriptorSetLayout(_device, in set2info, null, out _objectSetLayout);
 
+			//another set, one that holds a single texture
+			DescriptorSetLayoutBinding textureBind = InitializersVKG.DescriptorsetLayoutBinding( DescriptorType.CombinedImageSampler, ShaderStageFlags.ShaderStageFragmentBit, 0);
+
+			DescriptorSetLayoutCreateInfo set3info = new();
+			set3info.BindingCount = 1;
+			set3info.Flags = 0;
+			set3info.PNext = null;
+			set3info.SType = StructureType.DescriptorSetLayoutCreateInfo;
+			set3info.PBindings = &textureBind;
+
+			_vk.CreateDescriptorSetLayout(_device, in set3info, null, out _singleTextureSetLayout);
+
+
+			//
+			//
+			//
 			uint sceneParamBufferSize = FRAME_OVERLAP * PadUniformBufferSize((uint)Marshal.SizeOf<GPUSceneDataVKG>());
 
-			_sceneParameterBuffer = CreateBuffer(sceneParamBufferSize, BufferUsageFlags.BufferUsageUniformBufferBit, MemoryPropertyFlags.MemoryPropertyHostVisibleBit | MemoryPropertyFlags.MemoryPropertyHostCoherentBit);
+			_sceneParameterBuffer = CreateBuffer(sceneParamBufferSize, BufferUsageFlags.BufferUsageUniformBufferBit, MemoryPropertyFlags.MemoryPropertyHostVisibleBit);
 			
 			int MAX_OBJECTS = 10000;
 			for (int i = 0; i < FRAME_OVERLAP; i++)
 			{
-				_frames[i].objectBuffer = CreateBuffer((uint)(Marshal.SizeOf<GPUCameraDataVKG>() * MAX_OBJECTS), BufferUsageFlags.BufferUsageStorageBufferBit, MemoryPropertyFlags.MemoryPropertyHostVisibleBit | MemoryPropertyFlags.MemoryPropertyHostCoherentBit);
+				_frames[i].objectBuffer = CreateBuffer((uint)(Marshal.SizeOf<GPUCameraDataVKG>() * MAX_OBJECTS), BufferUsageFlags.BufferUsageStorageBufferBit, MemoryPropertyFlags.MemoryPropertyHostVisibleBit);
 
-				_frames[i].cameraBuffer = CreateBuffer((uint)Marshal.SizeOf<GPUCameraDataVKG>(), BufferUsageFlags.BufferUsageUniformBufferBit, MemoryPropertyFlags.MemoryPropertyHostVisibleBit | MemoryPropertyFlags.MemoryPropertyHostCoherentBit);
+				_frames[i].cameraBuffer = CreateBuffer((uint)Marshal.SizeOf<GPUCameraDataVKG>(), BufferUsageFlags.BufferUsageUniformBufferBit, MemoryPropertyFlags.MemoryPropertyHostVisibleBit);
 				
 				//allocate one descriptor set for each frame
 				DescriptorSetAllocateInfo allocInfo = new();
@@ -1035,7 +1098,7 @@ namespace TestVulkan
 				DescriptorBufferInfo objectBufferInfo;
 				objectBufferInfo.Buffer = _frames[i].objectBuffer._buffer;
 				objectBufferInfo.Offset = 0;
-				objectBufferInfo.Range = (ulong)(Marshal.SizeOf<GPUObjectData>() * MAX_OBJECTS);
+				objectBufferInfo.Range = (ulong)(Marshal.SizeOf<GPUObjectDataVKG>() * MAX_OBJECTS);
 
 				WriteDescriptorSet cameraWrite = InitializersVKG.WriteDescriptorBuffer(DescriptorType.UniformBuffer, _frames[i].globalDescriptor, ref cameraInfo, 0);
 
@@ -1092,6 +1155,12 @@ namespace TestVulkan
 				Trace.WriteLine("Triangle fragment shader successfully loaded");
 			}
 
+			ShaderModule texturedMeshShader = new();
+			if (!LoadShaderModule(Program.Directory + @"\TestVulkan\shaders\textured_litF.spv", ref texturedMeshShader))
+			{
+				Trace.WriteLine("Error when building the textured mesh shader");
+			}
+
 			//we start from just the default empty pipeline layout info
 			PipelineLayoutCreateInfo mesh_pipeline_layout_info = InitializersVKG.PipelineLayoutCreateInfo();
 
@@ -1125,6 +1194,33 @@ namespace TestVulkan
 				throw new Exception("failed to Create Pipeline Layout!");
 			}
 
+			//create pipeline layout for the textured mesh, which has 3 descriptor sets
+			//we start from  the normal mesh layout
+			PipelineLayoutCreateInfo textured_pipeline_layout_info = mesh_pipeline_layout_info;
+
+			DescriptorSetLayout[] texturedSetLayouts = new DescriptorSetLayout[] 
+			{ 
+				_globalSetLayout, 
+				_objectSetLayout, 
+				_singleTextureSetLayout
+			};
+
+			textured_pipeline_layout_info.SetLayoutCount = (uint)texturedSetLayouts.Length;
+			fixed (DescriptorSetLayout* texturedSetLayoutsPtr = &texturedSetLayouts[0])
+			{
+				textured_pipeline_layout_info.PSetLayouts = texturedSetLayoutsPtr;
+			}
+
+			PipelineLayout texturedPipeLayout;
+			if (_vk.CreatePipelineLayout(_device, in textured_pipeline_layout_info, null, out texturedPipeLayout) != Result.Success)
+			{
+				throw new Exception("failed to Create Pipeline Layout!");
+			}
+
+
+			//
+			//
+			//
 			//build the stage-create-info for both vertex and fragment stages. This lets the pipeline know the shader modules per stage
 			PipelineBuilderVKG pipelineBuilder = new();
 
@@ -1204,19 +1300,48 @@ namespace TestVulkan
 
 			CreateMaterial(_meshPipeline, _meshPipelineLayout, "defaultmesh");
 
+			pipelineBuilder._shaderStages[0] = InitializersVKG.PipelineShaderStageCreateInfo(ShaderStageFlags.ShaderStageVertexBit, meshVertShader);
+
+			pipelineBuilder._shaderStages[1] = InitializersVKG.PipelineShaderStageCreateInfo(ShaderStageFlags.ShaderStageFragmentBit, texturedMeshShader);
+			
+			pipelineBuilder._pipelineLayout = texturedPipeLayout;
+
+			Pipeline texPipeline = pipelineBuilder.BuildPipeline(_vk, _device, _renderPass);
+			CreateMaterial(texPipeline, texturedPipeLayout, "texturedmesh");
+
 			//destroy all shader modules, outside of the queue
 			_vk.DestroyShaderModule(_device, meshVertShader, null);
 			_vk.DestroyShaderModule(_device, triangleFragShader, null);
+			_vk.DestroyShaderModule(_device, texturedMeshShader, null);
 
 			deletors.Enqueue(new Action(() =>
 			{
 				//destroy the 1 pipelines we have created
 				_vk.DestroyPipeline(_device, _meshPipeline, null);
+				_vk.DestroyPipeline(_device, texPipeline, null);
 
 				//destroy the pipeline layout that they use
-				_vk.DestroyPipelineLayout(_device, _trianglePipelineLayout, null);
+				//_vk.DestroyPipelineLayout(_device, _trianglePipelineLayout, null);
 				_vk.DestroyPipelineLayout(_device, _meshPipelineLayout, null);
+				_vk.DestroyPipelineLayout(_device, texturedPipeLayout, null);
 			}));
+		}
+
+		unsafe private void LoadImages()
+		{
+			TextureVKG lostEmpire = new();
+
+			TexturesVKG.LoadImageFromFile(ref engine, Program.Directory + @"\TestVulkan\textures\lost_empire-RGBA.png", ref lostEmpire.image);
+
+			ImageViewCreateInfo imageinfo = InitializersVKG.ImageviewCreateInfo(Format.R8G8B8A8Srgb, lostEmpire.image._image, ImageAspectFlags.ImageAspectColorBit);
+			_vk.CreateImageView(_device,in imageinfo, null, out lostEmpire.imageView);
+
+			deletors.Enqueue(new Action(() =>
+			{
+				_vk.DestroyImageView(_device, lostEmpire.imageView, null);
+			}));
+
+			_loadedTextures["empire_diffuse"] = lostEmpire;
 		}
 
 		unsafe private void LoadMeshes() 
@@ -1245,6 +1370,13 @@ namespace TestVulkan
 			_meshes["monkey"] = _monkeyMesh;
 			_meshes["triangle"] = _triangleMesh;
 
+			MeshVKG lostEmpire = new();
+			lostEmpire.LoadFromObj(Program.Directory + @"\TestVulkan\models\lost_empireEdited.obj");
+
+			UploadMesh(ref lostEmpire);
+
+			_meshes["empire"] = lostEmpire;
+
 			deletors.Enqueue(new Action(() =>
 			{
 				VulkanMemoryChunk2 chunk = memory2.ReturnChunk(_triangleMesh._vertexBuffer._allocation);
@@ -1254,17 +1386,28 @@ namespace TestVulkan
 				chunk = memory2.ReturnChunk(_monkeyMesh._vertexBuffer._allocation);
 				_vk.DestroyBuffer(_device, _monkeyMesh._vertexBuffer._buffer, null);
 				memory2.FreeOne(ref _vk, ref _device, chunk, _monkeyMesh._vertexBuffer._allocation);
+
+				chunk = memory2.ReturnChunk(lostEmpire._vertexBuffer._allocation);
+				_vk.DestroyBuffer(_device, lostEmpire._vertexBuffer._buffer, null);
+				memory2.FreeOne(ref _vk, ref _device, chunk, lostEmpire._vertexBuffer._allocation);
 			}));
 		}
 
-		private void InitScene() 
+		unsafe private void InitScene() 
 		{
 			RenderObjectVKG monkey = new();
 			monkey.mesh = (MeshVKG)GetMesh("monkey");
-			monkey.material = (MaterialVKG)GetMaterial("defaultmesh");
+			monkey.material = GetMaterial("defaultmesh");
 			monkey.transformMatrix = Matrix4x4.Identity;
 
 			_renderables.Add(monkey);
+
+			RenderObjectVKG map;
+			map.mesh = (MeshVKG)GetMesh("empire");
+			map.material = GetMaterial("texturedmesh");
+			map.transformMatrix = Matrix4x4.CreateTranslation(new Vector3(5f, -10f, 0f));
+
+			_renderables.Add(map);
 
 			for (int x = -20; x <= 20; x++)
 			{
@@ -1282,9 +1425,44 @@ namespace TestVulkan
 					_renderables.Add(tri);
 				}
 			}
+
+			//create a sampler for the texture
+			SamplerCreateInfo samplerInfo = InitializersVKG.SamplerCreateInfo(Filter.Nearest);
+
+			Sampler blockySampler = new();
+			_vk.CreateSampler(_device, in samplerInfo, null, out blockySampler);
+
+			deletors.Enqueue(new Action(() => 
+			{
+				_vk.DestroySampler(_device, blockySampler, null);
+			}));
+
+			MaterialVKG texturedMat = GetMaterial("texturedmesh");
+
+			//allocate the descriptor set for single-texture to use on the material
+			DescriptorSetAllocateInfo allocInfo = new();
+			allocInfo.PNext = null;
+			allocInfo.SType = StructureType.DescriptorSetAllocateInfo;
+			allocInfo.DescriptorPool = _descriptorPool;
+			allocInfo.DescriptorSetCount = 1;
+			fixed (DescriptorSetLayout* _singleTextureSetLayoutPtr = &_singleTextureSetLayout)
+			{
+				allocInfo.PSetLayouts = _singleTextureSetLayoutPtr;
+			}
+			_vk.AllocateDescriptorSets(_device, in allocInfo, out texturedMat.textureSet);
+
+			//write to the descriptor set so that it points to our empire_diffuse texture
+			DescriptorImageInfo imageBufferInfo = new();
+			imageBufferInfo.Sampler = blockySampler;
+			imageBufferInfo.ImageView = _loadedTextures["empire_diffuse"].imageView;
+			imageBufferInfo.ImageLayout = ImageLayout.ShaderReadOnlyOptimal;
+
+			WriteDescriptorSet texture1 = InitializersVKG.WriteDescriptorImage( DescriptorType.CombinedImageSampler, texturedMat.textureSet,ref imageBufferInfo, 0);
+
+			_vk.UpdateDescriptorSets(_device, 1, in texture1, 0, null);
 		}
 
-		unsafe private AllocatedBufferVKG CreateBuffer(uint allocSize, BufferUsageFlags usage, MemoryPropertyFlags memoryUsage)
+		unsafe public AllocatedBufferVKG CreateBuffer(ulong allocSize, BufferUsageFlags usage, MemoryPropertyFlags memoryUsage)
 		{
 			//allocate vertex buffer
 			BufferCreateInfo bufferInfo = new();
@@ -1306,31 +1484,64 @@ namespace TestVulkan
 			return newBuffer;
 		}
 
-
 		unsafe private void UploadMesh(ref MeshVKG mesh) 
 		{
-			//allocate vertex buffer
-			BufferCreateInfo bufferInfo = new();
-			bufferInfo.SType = StructureType.BufferCreateInfo;
-			//this is the total size, in bytes, of the buffer we are allocating
-			bufferInfo.Size = (ulong)(mesh._vertices.Length * Marshal.SizeOf<VertexVKG>());
-			//this buffer is going to be used as a Vertex Buffer
-			bufferInfo.Usage = BufferUsageFlags.BufferUsageVertexBufferBit;
+			ulong bufferSize = (ulong)(mesh._vertices.Length * Marshal.SizeOf<VertexVKG>());
 
-			if (_vk.CreateBuffer(_device, in bufferInfo, null, out mesh._vertexBuffer._buffer) != Result.Success)
+			//allocate staging buffer
+			BufferCreateInfo stagingBufferInfo = new();
+			stagingBufferInfo.SType = StructureType.BufferCreateInfo;
+			stagingBufferInfo.PNext = null;
+
+			stagingBufferInfo.Size = bufferSize;
+			stagingBufferInfo.Usage = BufferUsageFlags.BufferUsageTransferSrcBit;
+
+			AllocatedBufferVKG stagingBuffer;
+
+			if (_vk.CreateBuffer(_device, in stagingBufferInfo, null, out stagingBuffer._buffer) != Result.Success)
 			{
 				throw new Exception("failed to create vertex buffer!");
 			}
 
-			mesh._vertexBuffer._allocation = memory2.BindImageOrBuffer(ref _vk, ref _device, mesh._vertexBuffer._buffer, MemoryPropertyFlags.MemoryPropertyHostVisibleBit | MemoryPropertyFlags.MemoryPropertyHostCoherentBit);
-			VulkanMemoryChunk2 chunk = memory2.ReturnChunk(mesh._vertexBuffer._allocation);
+			stagingBuffer._allocation = memory2.BindImageOrBuffer(ref _vk, ref _device, stagingBuffer._buffer, MemoryPropertyFlags.MemoryPropertyHostVisibleBit | MemoryPropertyFlags.MemoryPropertyHostCoherentBit);
+			VulkanMemoryChunk2 chunk = memory2.ReturnChunk(stagingBuffer._allocation);
 
 			void* data;
-			_vk.MapMemory(_device, chunk.DeviceMemory, mesh._vertexBuffer._allocation.StartOffset, (ulong)(mesh._vertices.Length * Marshal.SizeOf<VertexVKG>()), 0, &data);
+			_vk.MapMemory(_device, chunk.DeviceMemory, stagingBuffer._allocation.StartOffset, bufferSize, 0, &data);
 
 			mesh._vertices.AsSpan().CopyTo(new Span<VertexVKG>(data, mesh._vertices.Length));
 
 			_vk.UnmapMemory(_device, chunk.DeviceMemory);
+
+			//allocate vertex buffer
+			BufferCreateInfo vertexBufferInfo = new();
+			vertexBufferInfo.SType = StructureType.BufferCreateInfo;
+			vertexBufferInfo.PNext = null;
+			//this is the total size, in bytes, of the buffer we are allocating
+			vertexBufferInfo.Size = bufferSize;
+			//this buffer is going to be used as a Vertex Buffer
+			vertexBufferInfo.Usage = BufferUsageFlags.BufferUsageVertexBufferBit | BufferUsageFlags.BufferUsageTransferDstBit;
+
+			if (_vk.CreateBuffer(_device, in vertexBufferInfo, null, out mesh._vertexBuffer._buffer) != Result.Success)
+			{
+				throw new Exception("failed to create vertex buffer!");
+			}
+
+			mesh._vertexBuffer._allocation = memory2.BindImageOrBuffer(ref _vk, ref _device, mesh._vertexBuffer._buffer, MemoryPropertyFlags.MemoryPropertyDeviceLocalBit);
+
+			MeshVKG tmp = mesh;
+			ImmediateSubmit(new Action<CommandBuffer>((cmd) =>
+			{
+				BufferCopy copy = new();
+				copy.DstOffset = 0;
+				copy.SrcOffset = 0;
+				copy.Size = bufferSize;
+				_vk.CmdCopyBuffer(cmd, stagingBuffer._buffer, tmp._vertexBuffer._buffer, 1, in copy);
+			}));
+			mesh = tmp;
+
+			_vk.DestroyBuffer(_device, stagingBuffer._buffer, null);
+			memory2.FreeOne(ref _vk, ref _device, chunk, stagingBuffer._allocation);
 		}
 
 		unsafe private bool LoadShaderModule(string filePath, ref ShaderModule outShaderModule) 
@@ -1449,7 +1660,7 @@ namespace TestVulkan
 			void* objectData;
 			_vk.MapMemory(_device, chunk3.DeviceMemory, currentFrame.objectBuffer._allocation.StartOffset, (ulong)(Marshal.SizeOf<GPUCameraDataVKG>() * 10000), 0, &objectData);
 
-			GPUObjectData* objectSSBO = (GPUObjectData*)objectData;
+			GPUObjectDataVKG* objectSSBO = (GPUObjectDataVKG*)objectData;
 
 			for (int i = 0; i < count; i++)
 			{
@@ -1472,23 +1683,29 @@ namespace TestVulkan
 				//only bind the pipeline if it doesn't match with the already bound one
 				if (!obj.material.Equals(lastMaterial))
 				{
-					_vk.CmdBindPipeline(cmd, PipelineBindPoint.Graphics, obj.material.Value.pipeline);
+					_vk.CmdBindPipeline(cmd, PipelineBindPoint.Graphics, obj.material.pipeline);
 					lastMaterial = obj.material;
 
 					//offset for our scene buffer
 					uint uniform_offset = (uint)(PadUniformBufferSize((uint)Marshal.SizeOf<GPUSceneDataVKG>()) * frameIndex);
 
-					_vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Graphics, obj.material.Value.pipelineLayout, 0, 1, in currentFrame.globalDescriptor, 1, in uniform_offset);
+					_vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Graphics, obj.material.pipelineLayout, 0, 1, in currentFrame.globalDescriptor, 1, in uniform_offset);
 
 					//object data descriptor
-					_vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Graphics, obj.material.Value.pipelineLayout, 1, 1, in currentFrame.objectDescriptor, 0, null);
+					_vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Graphics, obj.material.pipelineLayout, 1, 1, in currentFrame.objectDescriptor, 0, null);
+
+					if (obj.material.textureSet.Handle != 0)
+					{
+						//texture descriptor
+						_vk.CmdBindDescriptorSets(cmd, PipelineBindPoint.Graphics, obj.material.pipelineLayout, 2, 1, in obj.material.textureSet, 0, null);
+					}
 				}
 
 				MeshPushConstantsVKG constants = new();
 				constants.render_matrix = obj.transformMatrix;
 
 				//upload the mesh to the GPU via push constants
-				_vk.CmdPushConstants(cmd, obj.material.Value.pipelineLayout, ShaderStageFlags.ShaderStageVertexBit, 0, (uint)Marshal.SizeOf<MeshPushConstantsVKG>(), ref constants);
+				_vk.CmdPushConstants(cmd, obj.material.pipelineLayout, ShaderStageFlags.ShaderStageVertexBit, 0, (uint)Marshal.SizeOf<MeshPushConstantsVKG>(), ref constants);
 
 				//only bind the mesh if it's a different one from last bind
 				if (!obj.mesh.Equals(lastMesh))
@@ -1748,7 +1965,41 @@ namespace TestVulkan
 			return alignedSize;
 		}
 
+		public void ImmediateSubmit(Action<CommandBuffer> function) 
+		{
+			CommandBuffer cmd = _uploadContext._commandBuffer;
 
+			//begin the command buffer recording. We will use this command buffer exactly once before resetting, so we tell vulkan that
+			CommandBufferBeginInfo cmdBeginInfo = InitializersVKG.CommandBufferBeginInfo(CommandBufferUsageFlags.CommandBufferUsageOneTimeSubmitBit);
+
+			if (_vk.BeginCommandBuffer(cmd, in cmdBeginInfo) != Result.Success)
+			{
+				throw new Exception("failed to Begin Command Buffer!");
+			}
+
+			//execute the function
+			function.Invoke(cmd);
+
+			if (_vk.EndCommandBuffer(cmd) != Result.Success)
+			{
+				throw new Exception("failed to End Command Buffer!");
+			}
+
+			SubmitInfo submit = InitializersVKG.SubmitInfo(ref cmd);
+
+			//submit command buffer to the queue and execute it.
+			// _uploadFence will now block until the graphic commands finish execution
+			if (_vk.QueueSubmit(_graphicsQueue, 1, in submit, _uploadContext._uploadFence) != Result.Success)
+			{
+				throw new Exception("failed to Queue Submit!");
+			}
+
+			_vk.WaitForFences(_device, 1, in _uploadContext._uploadFence, true, 9999999999);
+			_vk.ResetFences(_device, 1,in _uploadContext._uploadFence);
+
+			// reset the command buffers inside the command pool
+			_vk.ResetCommandPool(_device, _uploadContext._commandPool, 0);
+		}
 
 		//
 		//
@@ -1844,8 +2095,9 @@ namespace TestVulkan
 		//They are 64 bit handles to internal driver structures anyway so storing pointers to them isn't very useful
 
 
-		public struct MaterialVKG
+		public class MaterialVKG
 		{
+			public DescriptorSet textureSet = new(null); //texture defaulted to null
 			public Pipeline pipeline;
 			public PipelineLayout pipelineLayout;
 		};
@@ -1882,7 +2134,7 @@ namespace TestVulkan
 			public DescriptorSet objectDescriptor;
 		};
 
-		public struct GPUObjectData
+		public struct GPUObjectDataVKG
 		{
 			public Matrix4x4 modelMatrix;
 		};
@@ -1894,6 +2146,19 @@ namespace TestVulkan
 			public Vector4 ambientColor;
 			public Vector4 sunlightDirection; //w for sun power
 			public Vector4 sunlightColor;
+		};
+
+		public struct UploadContextVKG
+		{
+			public Fence _uploadFence;
+			public CommandPool _commandPool;
+			public CommandBuffer _commandBuffer;
+		};
+
+		public struct TextureVKG
+		{
+			public AllocatedImageVKG image;
+			public ImageView imageView;
 		};
 
 	}

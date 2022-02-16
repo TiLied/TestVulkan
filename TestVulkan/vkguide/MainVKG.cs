@@ -12,7 +12,7 @@ namespace TestVulkan
 		{
 			EngineVKG engine = new();
 
-			engine.Init();
+			engine.Init(ref engine);
 
 			engine.Run();
 
