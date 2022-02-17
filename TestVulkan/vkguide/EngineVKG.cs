@@ -1122,6 +1122,7 @@ namespace TestVulkan
 			{
 				_vk.DestroyDescriptorSetLayout(_device, _globalSetLayout, null);
 				_vk.DestroyDescriptorSetLayout(_device, _objectSetLayout, null);
+				_vk.DestroyDescriptorSetLayout(_device, _singleTextureSetLayout, null);
 
 				_vk.DestroyDescriptorPool(_device, _descriptorPool, null);
 
@@ -1415,7 +1416,7 @@ namespace TestVulkan
 				{
 					RenderObjectVKG tri;
 					tri.mesh = (MeshVKG)GetMesh("triangle");
-					tri.material = (MaterialVKG)GetMaterial("defaultmesh");
+					tri.material = GetMaterial("defaultmesh");
 
 					Matrix4x4 translation = Matrix4x4.CreateTranslation(new Vector3(x, 0, y));
 
@@ -2004,21 +2005,22 @@ namespace TestVulkan
 		//
 		//
 		//debug https://github.com/EvergineTeam/Vulkan.NET/blob/master/VulkanGen/HelloTriangle/0-Setup/HelloTriangle_ValidationLayer.cs
-		unsafe public static Bool32 DebugCallback(DebugUtilsMessageSeverityFlagsEXT messageSeverity, DebugUtilsMessageTypeFlagsEXT messageType, DebugUtilsMessengerCallbackDataEXT pCallbackData, void* pUserData)
+		unsafe public static uint DebugCallback(DebugUtilsMessageSeverityFlagsEXT messageSeverity, DebugUtilsMessageTypeFlagsEXT messageType, DebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
 		{
 			if (messageSeverity > DebugUtilsMessageSeverityFlagsEXT.DebugUtilsMessageSeverityVerboseBitExt)
 			{
 				Trace.Indent();
 				Trace.WriteLine($"{messageSeverity} {messageType}: ");
-				Trace.WriteLine($"{Marshal.PtrToStringAnsi((IntPtr)pCallbackData.PMessage)}");
+				Trace.WriteLine($"{Marshal.PtrToStringAnsi((IntPtr)pCallbackData->PMessage)}");
 				Trace.WriteLine("");
 				Trace.Unindent();
 			}
-			return false;
+
+			return Vk.False;
 		}
 
 		unsafe public delegate Bool32 DebugCallbackDelegate(DebugUtilsMessageSeverityFlagsEXT messageSeverity, DebugUtilsMessageTypeFlagsEXT messageType, DebugUtilsMessengerCallbackDataEXT pCallbackData, void* pUserData);
-		unsafe public static DebugCallbackDelegate CallbackDelegate = new DebugCallbackDelegate(DebugCallback);
+		//unsafe public static DebugCallbackDelegate CallbackDelegate = new DebugCallbackDelegate(DebugCallback);
 
 		[UnmanagedFunctionPointer(CallingConvention.StdCall)]
 		unsafe private delegate Result vkCreateDebugUtilsMessengerEXTDelegate(Instance instance, DebugUtilsMessengerCreateInfoEXT* pCreateInfo, AllocationCallbacks* pAllocator, DebugUtilsMessengerEXT* pMessenger);
@@ -2053,7 +2055,8 @@ namespace TestVulkan
 			createInfo.SType = StructureType.DebugUtilsMessengerCreateInfoExt;
 			createInfo.MessageSeverity = DebugUtilsMessageSeverityFlagsEXT.DebugUtilsMessageSeverityVerboseBitExt | DebugUtilsMessageSeverityFlagsEXT.DebugUtilsMessageSeverityWarningBitExt | DebugUtilsMessageSeverityFlagsEXT.DebugUtilsMessageSeverityErrorBitExt;
 			createInfo.MessageType = DebugUtilsMessageTypeFlagsEXT.DebugUtilsMessageTypeGeneralBitExt | DebugUtilsMessageTypeFlagsEXT.DebugUtilsMessageTypePerformanceBitExt | DebugUtilsMessageTypeFlagsEXT.DebugUtilsMessageTypeValidationBitExt;
-			createInfo.PfnUserCallback = new PfnDebugUtilsMessengerCallbackEXT((delegate* unmanaged[Cdecl]<DebugUtilsMessageSeverityFlagsEXT, DebugUtilsMessageTypeFlagsEXT, DebugUtilsMessengerCallbackDataEXT*, void*, Bool32>)Marshal.GetFunctionPointerForDelegate(CallbackDelegate));
+			//createInfo.PfnUserCallback = new PfnDebugUtilsMessengerCallbackEXT((delegate* unmanaged[Cdecl]<DebugUtilsMessageSeverityFlagsEXT, DebugUtilsMessageTypeFlagsEXT, DebugUtilsMessengerCallbackDataEXT*, void*, Bool32>)Marshal.GetFunctionPointerForDelegate(CallbackDelegate));
+			createInfo.PfnUserCallback = (DebugUtilsMessengerCallbackFunctionEXT)DebugCallback;
 			createInfo.PUserData = null;
 		}
 		unsafe public void DestroyDebugMessenger()

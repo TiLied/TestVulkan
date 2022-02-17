@@ -169,8 +169,7 @@ namespace TestVulkan
 			_vmi.IsFreed = false;
 			_vmi.MemoryRequirements = memRequirements;
 			_vmi.SizeWithAdjacentOffset = (memRequirements.Size + AdjacentOffset - 1) & ~(AdjacentOffset - 1);
-			//TODO? Uncomment?
-			//_vmi.SizeWithAdjacentOffset += AdjacentOffset;
+			_vmi.SizeWithAdjacentOffset += AdjacentOffset;
 
 			return _vmi;
 		}
