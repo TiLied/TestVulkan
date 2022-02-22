@@ -155,6 +155,7 @@ namespace TestVulkan
 
 		private Image TextureImage;
 		private DeviceMemory TextureImageMemory;
+		private VulkanMemoryItem2 TextureImageItem;
 
 		private ImageView TextureImageView;
 		private Sampler TextureSampler;
@@ -162,6 +163,7 @@ namespace TestVulkan
 		private Image DepthImage;
 		private DeviceMemory DepthImageMemory;
 		private ImageView DepthImageView;
+		private VulkanMemoryItem2 DepthImageItem;
 
 		private int CurrentFrame = 0;
 
@@ -185,6 +187,7 @@ namespace TestVulkan
 		private Image ColorImage;
 		private DeviceMemory ColorImageMemory;
 		private ImageView ColorImageView;
+		private VulkanMemoryItem2 ColorImageItem;
 
 		private bool Test = true;
 		private bool Test2 = true;
@@ -1047,7 +1050,7 @@ namespace TestVulkan
 		{
 			Format colorFormat = SwapChainImageFormat;
 
-			CreateImage((int)SwapChainExtent.Width, (int)SwapChainExtent.Height, 1, MsaaSamples, colorFormat, ImageTiling.Optimal, ImageUsageFlags.ImageUsageTransientAttachmentBit | ImageUsageFlags.ImageUsageColorAttachmentBit, MemoryPropertyFlags.MemoryPropertyDeviceLocalBit, ref ColorImage, ref ColorImageMemory);
+			ColorImageItem = CreateImage((int)SwapChainExtent.Width, (int)SwapChainExtent.Height, 1, MsaaSamples, colorFormat, ImageTiling.Optimal, ImageUsageFlags.ImageUsageTransientAttachmentBit | ImageUsageFlags.ImageUsageColorAttachmentBit, MemoryPropertyFlags.MemoryPropertyDeviceLocalBit, ref ColorImage, ref ColorImageMemory);
 			CreateImageView(ColorImage, colorFormat, ImageAspectFlags.ImageAspectColorBit, 1, ref ColorImageView);
 		}
 
@@ -1055,7 +1058,7 @@ namespace TestVulkan
 		{
 			Format depthFormat = FindDepthFormat();
 
-			CreateImage((int)SwapChainExtent.Width, (int)SwapChainExtent.Height, 1, MsaaSamples, depthFormat, ImageTiling.Optimal, ImageUsageFlags.ImageUsageDepthStencilAttachmentBit, MemoryPropertyFlags.MemoryPropertyDeviceLocalBit, ref DepthImage, ref DepthImageMemory);
+			DepthImageItem = CreateImage((int)SwapChainExtent.Width, (int)SwapChainExtent.Height, 1, MsaaSamples, depthFormat, ImageTiling.Optimal, ImageUsageFlags.ImageUsageDepthStencilAttachmentBit, MemoryPropertyFlags.MemoryPropertyDeviceLocalBit, ref DepthImage, ref DepthImageMemory);
 
 			CreateImageView(DepthImage, depthFormat, ImageAspectFlags.ImageAspectDepthBit, 1, ref DepthImageView);
 
@@ -1085,7 +1088,7 @@ namespace TestVulkan
 
 			MipLevels = (uint)(Math.Floor(Math.Log2(Math.Max(image.Width, image.Height)))) + 1;
 
-			CreateImage(image.Width, image.Height, MipLevels, SampleCountFlags.SampleCount1Bit, Format.R8G8B8A8Srgb, ImageTiling.Optimal, ImageUsageFlags.ImageUsageTransferSrcBit | ImageUsageFlags.ImageUsageTransferDstBit | ImageUsageFlags.ImageUsageSampledBit, MemoryPropertyFlags.MemoryPropertyDeviceLocalBit, ref TextureImage, ref TextureImageMemory);
+			TextureImageItem = CreateImage(image.Width, image.Height, MipLevels, SampleCountFlags.SampleCount1Bit, Format.R8G8B8A8Srgb, ImageTiling.Optimal, ImageUsageFlags.ImageUsageTransferSrcBit | ImageUsageFlags.ImageUsageTransferDstBit | ImageUsageFlags.ImageUsageSampledBit, MemoryPropertyFlags.MemoryPropertyDeviceLocalBit, ref TextureImage, ref TextureImageMemory);
 
 			TransitionImageLayout(TextureImage, Format.R8G8B8A8Srgb, ImageLayout.Undefined, ImageLayout.TransferDstOptimal, MipLevels);
 
@@ -1619,7 +1622,7 @@ namespace TestVulkan
 			}
 		}
 
-		unsafe private void CreateImage(int width, int height, uint mipLevels, SampleCountFlags numSamples, Format format, ImageTiling tiling, ImageUsageFlags usage, MemoryPropertyFlags properties, ref Image image, ref DeviceMemory imageMemory)
+		unsafe private VulkanMemoryItem2 CreateImage(int width, int height, uint mipLevels, SampleCountFlags numSamples, Format format, ImageTiling tiling, ImageUsageFlags usage, MemoryPropertyFlags properties, ref Image image, ref DeviceMemory imageMemory)
 		{
 			ImageCreateInfo imageInfo = new();
 
@@ -1650,7 +1653,6 @@ namespace TestVulkan
 				{
 					Trace.TraceError("failed to create image!");
 					Console.ReadKey();
-					return;
 				}
 
 			}
@@ -1707,7 +1709,8 @@ namespace TestVulkan
 			_vk.BindImageMemory(Device, image, imageMemory, 0);
 			*/
 			//VulkanMemoryLocal.BindImage(ref _vk, ref Device, ref image, properties);
-			VulkanMemoryLocal2.BindImageOrBuffer(ref _vk, ref Device, image, properties);
+			VulkanMemoryItem2 item = VulkanMemoryLocal2.BindImageOrBuffer(ref _vk, ref Device, image, properties);
+			return item;
 		}
 
 		unsafe private void CreateImageView(Image image, Format format, ImageAspectFlags aspectFlags, uint mipLevels, ref ImageView imageView)
@@ -2576,15 +2579,17 @@ namespace TestVulkan
 			_vk.DestroyImageView(Device, TextureImageView, null);
 
 			_vk.DestroyImage(Device, TextureImage, null);
-			_vk.FreeMemory(Device, TextureImageMemory, null);
+			//_vk.FreeMemory(Device, TextureImageMemory, null);
+			VulkanMemoryChunk2 chunk = VulkanMemoryLocal2.ReturnChunk(TextureImageItem);
+			VulkanMemoryLocal2.FreeOne(ref _vk, ref Device, chunk, TextureImageItem);
 
 			_vk.DestroyDescriptorSetLayout(Device, DescriptorSetLayout, null);
 
 			_vk.DestroyBuffer(Device, IndexBuffer, null);
-			_vk.FreeMemory(Device, IndexBufferMemory, null);
+			//_vk.FreeMemory(Device, IndexBufferMemory, null);
 
 			_vk.DestroyBuffer(Device, VertexBuffer, null);
-			_vk.FreeMemory(Device, VertexBufferMemory, null);
+			//_vk.FreeMemory(Device, VertexBufferMemory, null);
 
 			//VulkanMemoryLocal.FreeAll(ref _vk, ref Device);
 			VulkanMemoryLocal2.FreeAll(ref _vk, ref Device);
@@ -2629,12 +2634,17 @@ namespace TestVulkan
 			
 			_vk.DestroyImageView(Device, ColorImageView, null);
 			_vk.DestroyImage(Device, ColorImage, null);
-			_vk.FreeMemory(Device, ColorImageMemory, null);
+			//_vk.FreeMemory(Device, ColorImageMemory, null);
+			VulkanMemoryChunk2 chunk = VulkanMemoryLocal2.ReturnChunk(ColorImageItem);
+			VulkanMemoryLocal2.FreeOne(ref _vk, ref Device, chunk, ColorImageItem);
+
 
 			_vk.DestroyImageView(Device, DepthImageView, null);
 			_vk.DestroyImage(Device, DepthImage, null);
-			_vk.FreeMemory(Device, DepthImageMemory, null);
-			
+			//_vk.FreeMemory(Device, DepthImageMemory, null);
+			chunk = VulkanMemoryLocal2.ReturnChunk(DepthImageItem);
+			VulkanMemoryLocal2.FreeOne(ref _vk, ref Device, chunk, DepthImageItem);
+
 			foreach (Framebuffer framebuffer in SwapChainFramebuffers)
 			{
 				_vk.DestroyFramebuffer(Device, framebuffer, null);
@@ -2654,19 +2664,21 @@ namespace TestVulkan
 			}
 
 			_vkSwapchain?.DestroySwapchain(Device, SwapChain, null);
-
+			/*
 			Parallel.For(0, SwapChainImages.Length, (i) =>
 			{
 				_vk.DestroyBuffer(Device, UniformBuffers[i], null);
 				//_vk.FreeMemory(Device, UniformBuffersMemory[i], null);
 				VulkanMemoryLocal2.FreeOne(ref _vk, ref Device, UniformBuffersChunks[i], UniformBuffersItems[i]);
-			});
-			/*
+			});*/
+			
 			for (int i = 0; i < SwapChainImages.Length; i++)
 			{
+				//_vk.DestroyBuffer(Device, UniformBuffers[i], null);
+				//_vk.FreeMemory(Device, UniformBuffersMemory[i], null);
 				_vk.DestroyBuffer(Device, UniformBuffers[i], null);
-				_vk.FreeMemory(Device, UniformBuffersMemory[i], null);
-			}*/
+				VulkanMemoryLocal2.FreeOne(ref _vk, ref Device, UniformBuffersChunks[i], UniformBuffersItems[i]);
+			}
 
 			_vk.DestroyDescriptorPool(Device, DescriptorPool, null);
 		}

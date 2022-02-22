@@ -46,14 +46,14 @@ namespace TestVulkan
 
 			Trace.WriteLine(Directory);
 
-			//VulkanTutorial v = new();
-			//v.Run();
+			VulkanTutorial v = new();
+			v.Run();
 
 			//FirstAppT v2 = new();
 			//v2.Run();
 
-			MainVKG v3 = new();
-			v3.Run();
+			//MainVKG v3 = new();
+			//v3.Run();
 
 			Console.ReadKey();
 		}

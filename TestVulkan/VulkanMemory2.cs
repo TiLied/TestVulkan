@@ -10,6 +10,8 @@ namespace TestVulkan
 		//
 		//
 
+		//TODO BUFFERS?
+
 		//Best Practices layer suggest threshold
 		private const ulong MinSizeOneAllocation = 262144;
 
@@ -116,12 +118,13 @@ namespace TestVulkan
 
 					ulong _sizeAll = 0;
 
-					foreach (VulkanMemoryItem2 _item2 in entry.Value.VulkanMemoryItems)
+					VulkanMemoryItem2[] tempArr = entry.Value.VulkanMemoryItems.ToArray();
+					for (int i = tempArr.Length - 1; i >= 0; i--)
 					{
-						//_item2.StartOffset = _sizeAll;
-						if (_item2.SizeWithAdjacentOffset > entry.Value.Alignment)
+						tempArr[i].StartOffset = _sizeAll;
+						if (tempArr[i].SizeWithAdjacentOffset > entry.Value.Alignment)
 						{
-							_divide = _item2.SizeWithAdjacentOffset / entry.Value.Alignment;
+							_divide = tempArr[i].SizeWithAdjacentOffset / entry.Value.Alignment;
 							_sizeAll += (ulong)(entry.Value.Alignment * MathF.Ceiling(_divide));
 						}
 						else
@@ -129,6 +132,24 @@ namespace TestVulkan
 							_sizeAll += entry.Value.Alignment;
 						}
 					}
+
+					/*
+					foreach (VulkanMemoryItem2 _item2 in entry.Value.VulkanMemoryItems)
+					{
+						ulong _sizeOne = 0;
+						if (_item2.SizeWithAdjacentOffset > entry.Value.Alignment)
+						{
+							_divide = _item2.SizeWithAdjacentOffset / entry.Value.Alignment;
+							_sizeOne = (ulong)(entry.Value.Alignment * MathF.Ceiling(_divide));
+							_sizeAll += _sizeOne;
+						}
+						else
+						{
+							_sizeOne = entry.Value.Alignment;
+							_sizeAll += entry.Value.Alignment;
+						}
+						//_item2.StartOffset = _sizeOne;
+					}*/
 
 					entry.Value.FreeSpace -= _size;
 
@@ -146,7 +167,7 @@ namespace TestVulkan
 				}
 			}
 
-			VulkanMemoryChunk2 _chunck = MakeChank(ref vk, ref device, _list, _index, _sizeOfAllocation, memRequirements);
+			VulkanMemoryChunk2 _chunck = MakeChank(ref vk, ref device, _list, _index, _sizeOfAllocation, _item);
 
 			_item.IdChunk = _chunck.IdChunk;
 			_item.StartOffset = 0;
@@ -174,7 +195,7 @@ namespace TestVulkan
 			return _vmi;
 		}
 
-		unsafe private VulkanMemoryChunk2 MakeChank(ref Vk vk, ref Device device, ConcurrentDictionary<int, VulkanMemoryChunk2> _list, uint _index, ulong _sizeOfAllocation, MemoryRequirements memRequirements)
+		unsafe private VulkanMemoryChunk2 MakeChank(ref Vk vk, ref Device device, ConcurrentDictionary<int, VulkanMemoryChunk2> _list, uint _index, ulong _sizeOfAllocation, VulkanMemoryItem2 item)
 		{
 			VulkanMemoryChunk2 _vmc = new();
 			DeviceMemory _deviceMemory;
@@ -183,29 +204,29 @@ namespace TestVulkan
 
 			IdChunk += 1;
 
-			_vmc.Alignment = memRequirements.Alignment;
+			_vmc.Alignment = item.MemoryRequirements.Alignment;
 
 			MemoryAllocateInfo allocInfo = new();
 			allocInfo.SType = StructureType.MemoryAllocateInfo;
 
-			if (_sizeOfAllocation >= memRequirements.Size)
+			if (_sizeOfAllocation >= item.SizeWithAdjacentOffset)
 			{
 				allocInfo.AllocationSize = _sizeOfAllocation;
-
+				//allocInfo.AllocationSize = item.MemoryRequirements.Size;
 				_vmc.Size = _sizeOfAllocation;
-				_vmc.FreeSpace = _sizeOfAllocation - memRequirements.Size;
+				_vmc.FreeSpace = _sizeOfAllocation - item.SizeWithAdjacentOffset;
 			}
 			else
 			{
-				allocInfo.AllocationSize = memRequirements.Size;
-
-				_vmc.Size = memRequirements.Size;
+				allocInfo.AllocationSize = item.SizeWithAdjacentOffset;
+				//allocInfo.AllocationSize = item.MemoryRequirements.Size;
+				_vmc.Size = item.SizeWithAdjacentOffset;
 				_vmc.FreeSpace = 0;
 			}
 
 			allocInfo.MemoryTypeIndex = _index;
 
-			if (vk.AllocateMemory(device, &allocInfo, null, &_deviceMemory) != Result.Success)
+			if (vk.AllocateMemory(device, in allocInfo, null, out _deviceMemory) != Result.Success)
 			{
 				Trace.TraceError("failed to allocate image memory!");
 				Console.ReadKey();
