@@ -163,6 +163,7 @@ namespace TestVulkan
 					GlobalUbo ubo = new();
 					ubo.Projection = camera.GetProjection;
 					ubo.View = camera.GetView;
+					ubo.InverseView = camera.GetInverseView;
 					//PointLight[] bytes = new PointLight[10];
 					//fixed (PointLight* ptr = bytes)
 					//{

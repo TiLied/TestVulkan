@@ -19,6 +19,8 @@ namespace TestVulkan
 			public SDL.SDL_Keycode LookRight = SDL.SDL_Keycode.SDLK_RIGHT;
 			public SDL.SDL_Keycode LookUp = SDL.SDL_Keycode.SDLK_UP;
 			public SDL.SDL_Keycode LookDown = SDL.SDL_Keycode.SDLK_DOWN;
+
+			public KeyMappings() { }
 		}
 
 		public KeyMappings Keys = new();

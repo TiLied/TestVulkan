@@ -2078,10 +2078,12 @@ namespace TestVulkan
 
 		public struct QueueFamilyIndicesVKG
 		{
-			public uint GraphicsFamily;
-			public uint PresentFamily;
+			public uint GraphicsFamily = 0;
+			public uint PresentFamily = 0;
 			public bool GraphicsFamilyHasValue = false;
 			public bool PresentFamilyHasValue = false;
+
+			public QueueFamilyIndicesVKG() { }
 			public bool IsComplete()
 			{
 				return GraphicsFamilyHasValue && PresentFamilyHasValue;

@@ -5,23 +5,25 @@ namespace TestVulkan
 {
 	public struct PipelineConfigInfo
 	{
-		public VkVertexInputBindingDescription[] BindingDescriptions;
-		public VkVertexInputAttributeDescription[] AttributeDescriptions;
+		public VkVertexInputBindingDescription[] BindingDescriptions = Array.Empty<VkVertexInputBindingDescription>();
+		public VkVertexInputAttributeDescription[] AttributeDescriptions = Array.Empty<VkVertexInputAttributeDescription>();
 
-		public VkPipelineViewportStateCreateInfo ViewportInfo;
-		public VkPipelineInputAssemblyStateCreateInfo InputAssemblyInfo;
-		public VkPipelineRasterizationStateCreateInfo RasterizationInfo;
-		public VkPipelineMultisampleStateCreateInfo MultisampleInfo;
-		public VkPipelineColorBlendAttachmentState ColorBlendAttachment;
-		public VkPipelineColorBlendStateCreateInfo ColorBlendInfo;
-		public VkPipelineDepthStencilStateCreateInfo DepthStencilInfo;
+		public VkPipelineViewportStateCreateInfo ViewportInfo = new();
+		public VkPipelineInputAssemblyStateCreateInfo InputAssemblyInfo = new();
+		public VkPipelineRasterizationStateCreateInfo RasterizationInfo = new();
+		public VkPipelineMultisampleStateCreateInfo MultisampleInfo = new();
+		public VkPipelineColorBlendAttachmentState ColorBlendAttachment = new();
+		public VkPipelineColorBlendStateCreateInfo ColorBlendInfo = new();
+		public VkPipelineDepthStencilStateCreateInfo DepthStencilInfo = new();
 
-		public VkDynamicState[] DynamicStateEnables;
-		public VkPipelineDynamicStateCreateInfo DynamicStateInfo;
+		public VkDynamicState[] DynamicStateEnables = Array.Empty<VkDynamicState>();
+		public VkPipelineDynamicStateCreateInfo DynamicStateInfo = new();
 
 		public VkPipelineLayout PipelineLayout = VkPipelineLayout.Null;
 		public VkRenderPass RenderPass = VkRenderPass.Null;
 		public uint Subpass = 0;
+
+		public PipelineConfigInfo() { }
 	}
 
 	public class PipelineT

@@ -13,6 +13,8 @@ namespace TestVulkan
 		[FieldOffset(64)]
 		public Matrix4x4 NormalMatrix = Matrix4x4.Identity;
 
+		public SimplePushConstantData() { }
+
 	}
 	public class SimpleRenderSystemT
 	{

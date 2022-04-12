@@ -7,9 +7,12 @@ namespace TestVulkan
 	{
 		private Matrix4x4 ProjectionMatrix = Matrix4x4.Identity;
 		private Matrix4x4 ViewMatrix = Matrix4x4.Identity;
+		private Matrix4x4 InverseViewMatrix = Matrix4x4.Identity;
 
 		public Matrix4x4 GetProjection => ProjectionMatrix;
 		public Matrix4x4 GetView => ViewMatrix;
+		public Matrix4x4 GetInverseView => InverseViewMatrix;
+
 		public CameraT()
 		{
 		}
@@ -70,6 +73,20 @@ namespace TestVulkan
 			ViewMatrix.M41 = -Vector3.Dot(u,position);
 			ViewMatrix.M42 = -Vector3.Dot(v, position);
 			ViewMatrix.M43 = -Vector3.Dot(w, position);
+
+			InverseViewMatrix = Matrix4x4.Identity;
+			InverseViewMatrix.M11 = u.X;
+			InverseViewMatrix.M12 = u.Y;
+			InverseViewMatrix.M13 = u.Z;
+			InverseViewMatrix.M21 = v.X;
+			InverseViewMatrix.M22 = v.Y;
+			InverseViewMatrix.M23 = v.Z;
+			InverseViewMatrix.M31 = w.X;
+			InverseViewMatrix.M32 = w.Y;
+			InverseViewMatrix.M33 = w.Z;
+			InverseViewMatrix.M41 = position.X;
+			InverseViewMatrix.M42 = position.Y;
+			InverseViewMatrix.M43 = position.Z;
 		}
 
 		public void SetViewTarget(Vector3 position, Vector3 target, Vector3? up)
@@ -109,6 +126,20 @@ namespace TestVulkan
 			ViewMatrix.M41 = -Vector3.Dot(u, position);
 			ViewMatrix.M42 = -Vector3.Dot(v, position);
 			ViewMatrix.M43 = -Vector3.Dot(w, position);
+
+			InverseViewMatrix = Matrix4x4.Identity;
+			InverseViewMatrix.M11 = u.X;
+			InverseViewMatrix.M12 = u.Y;
+			InverseViewMatrix.M13 = u.Z;
+			InverseViewMatrix.M21 = v.X;
+			InverseViewMatrix.M22 = v.Y;
+			InverseViewMatrix.M23 = v.Z;
+			InverseViewMatrix.M31 = w.X;
+			InverseViewMatrix.M32 = w.Y;
+			InverseViewMatrix.M33 = w.Z;
+			InverseViewMatrix.M41 = position.X;
+			InverseViewMatrix.M42 = position.Y;
+			InverseViewMatrix.M43 = position.Z;
 		}
 	}
 }

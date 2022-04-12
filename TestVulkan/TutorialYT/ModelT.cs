@@ -54,8 +54,10 @@ namespace TestVulkan
 
 	public struct BuilderT 
 	{
-		public VertexT[] Vertices;
+		public VertexT[] Vertices = Array.Empty<VertexT>();
 		public uint[] Indices = Array.Empty<uint>();
+
+		public BuilderT() { }
 
 		public void LoadModel(ref string filepath) 
 		{

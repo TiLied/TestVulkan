@@ -15,10 +15,12 @@ namespace TestVulkan
 	}*/
 	public struct VertexInputDescriptionVKG
 	{
-		public VertexInputBindingDescription[] bindings;
-		public VertexInputAttributeDescription[] attributes;
+		public VertexInputBindingDescription[] bindings = Array.Empty<VertexInputBindingDescription>();
+		public VertexInputAttributeDescription[] attributes = Array.Empty<VertexInputAttributeDescription>();
 
 		public uint flags = 0;
+
+		public VertexInputDescriptionVKG() { }
 	};
 
 	public struct VertexVKG

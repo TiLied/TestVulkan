@@ -6,10 +6,12 @@ namespace TestVulkan
 {
 	public struct TransformComponent 
 	{
-		public Vector3 Translation;
+		public Vector3 Translation = new();
 		public Vector3 Scale = new(1.0f, 1.0f, 1.0f);
-		public Vector3 Rotation;
+		public Vector3 Rotation = new();
 		public float Angle = 0f;
+
+		public TransformComponent() { }
 
 		public Matrix4x4 Mat4() 
 		{
@@ -109,6 +111,8 @@ namespace TestVulkan
 	public struct PointLightComponent 
 	{
 		public float lightIntensity = 1.0f;
+
+		public PointLightComponent() { }
 	}
 
 	public class GameObjectT

@@ -157,6 +157,7 @@ namespace TestVulkan
 			if (size == VulkanNative.VK_WHOLE_SIZE)
 			{
 				GlobalUboBase[] baseUbo = new GlobalUboBase[1];
+				baseUbo[0].InverseView = data.InverseView;
 				baseUbo[0].View = data.View;
 				baseUbo[0].Projection = data.Projection;
 				baseUbo[0].NumLights = data.NumLights;

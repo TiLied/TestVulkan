@@ -15,10 +15,12 @@ namespace TestVulkan
 
 	public struct QueueFamilyIndicesT
 	{
-		public uint GraphicsFamily;
-		public uint PresentFamily;
+		public uint GraphicsFamily = 0;
+		public uint PresentFamily = 0;
 		public bool GraphicsFamilyHasValue = false;
 		public bool PresentFamilyHasValue = false;
+
+		public QueueFamilyIndicesT() { }
 		public bool IsComplete() 
 		{ 
 			return GraphicsFamilyHasValue && PresentFamilyHasValue; 
