@@ -51,6 +51,20 @@ namespace TestVulkan
 
 		unsafe public void Render(ref FrameInfo frameInfo)
 		{
+			SortedDictionary<float, GameObjectT> sorted = new();
+
+			foreach (KeyValuePair<int, GameObjectT> keyValue in GameObjectT.Map)
+			{
+				GameObjectT obj = keyValue.Value;
+				if (obj.PointLight == null)
+					continue;
+
+				Vector3 offset = frameInfo.Camera.GetPosition - obj.Transform.Translation;
+				float disSquared = Vector3.Dot(offset, offset);
+				sorted[disSquared] = obj;
+				
+			}
+
 			Pipeline.Bind(frameInfo.CommandBuffer);
 
 			fixed (VkDescriptorSet* globalDescriptorSet = &frameInfo.GlobalDescriptorSet)
@@ -65,11 +79,9 @@ namespace TestVulkan
 					null);
 			}
 
-			foreach (KeyValuePair<int, GameObjectT> keyValue in GameObjectT.Map)
+			foreach (KeyValuePair<float, GameObjectT> keyValue in sorted.Reverse())
 			{
 				GameObjectT obj = keyValue.Value;
-				if (obj.PointLight == null)
-					continue;
 
 				PointLightConstant push = new();
 				push.Position = new Vector4(obj.Transform.Translation, 1.0f);
@@ -123,6 +135,8 @@ namespace TestVulkan
 			PipelineConfigInfo pipelineConfig = new();
 
 			PipelineT.DefaultPipelineConfig(ref pipelineConfig);
+			PipelineT.EnableAlphaBlending(ref pipelineConfig);
+
 			pipelineConfig.AttributeDescriptions = Array.Empty<VkVertexInputAttributeDescription>();
 			pipelineConfig.BindingDescriptions = Array.Empty<VkVertexInputBindingDescription>();
 

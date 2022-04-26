@@ -12,6 +12,7 @@ namespace TestVulkan
 		public Matrix4x4 GetProjection => ProjectionMatrix;
 		public Matrix4x4 GetView => ViewMatrix;
 		public Matrix4x4 GetInverseView => InverseViewMatrix;
+		public Vector3 GetPosition => new(InverseViewMatrix.M41, InverseViewMatrix.M42, InverseViewMatrix.M43);
 
 		public CameraT()
 		{

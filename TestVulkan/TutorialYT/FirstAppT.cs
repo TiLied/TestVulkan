@@ -164,21 +164,16 @@ namespace TestVulkan
 					ubo.Projection = camera.GetProjection;
 					ubo.View = camera.GetView;
 					ubo.InverseView = camera.GetInverseView;
-					//PointLight[] bytes = new PointLight[10];
-					//fixed (PointLight* ptr = bytes)
-					//{
-					//	ubo.PointLights = ptr;
-					//}
 					pointLightSystem.Update(ref frameInfo, ref ubo);
 					uboBuffers[frameIndex].WriteToBufferU(ref ubo);
 					uboBuffers[frameIndex].Flush();
-					//globalUboBuffer.WriteToIndexU(ref ubo, frameIndex);
-					//globalUboBuffer.FlushIndex(frameIndex);
 
 					//render
 					Renderer.BeginSwapChainRenderPass(cB);
+					
 					simpleRenderSystem.RenderGameObjects(ref frameInfo);
 					pointLightSystem.Render(ref frameInfo);
+
 					Renderer.EndSwapChainRenderPass(cB);
 					Renderer.EndFrame();
 				}
@@ -249,6 +244,8 @@ namespace TestVulkan
 			}
 
 			//test
+			//
+			//
 			BuilderT b = new();
 			b.Vertices = new VertexT[4]
 			{
@@ -287,8 +284,8 @@ namespace TestVulkan
 			GameObjectT gameObjectTest = new();
 			gameObjectTest.Model = model;
 
-			gameObjectTest.Transform.Translation = new Vector3(0f, -1f, 0f);
-			gameObjectTest.Transform.Scale = new Vector3(3f, 3f, 1f);
+			gameObjectTest.Transform.Translation = new Vector3(0f, -2f, 0f);
+			gameObjectTest.Transform.Scale = new Vector3(4f, 4f, 1f);
 
 			GameObjectT.Map.Add(gameObjectTest.GetId(), gameObjectTest);
 		}

@@ -16,10 +16,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Evergine.Bindings.Vulkan" Version="2022.1.28.12" />
-    <PackageReference Include="Silk.NET.Vulkan" Version="2.13.0" />
-    <PackageReference Include="Silk.NET.Vulkan.Extensions.EXT" Version="2.13.0" />
-    <PackageReference Include="Silk.NET.Vulkan.Extensions.KHR" Version="2.13.0" />
+    <PackageReference Include="Evergine.Bindings.Vulkan" Version="2022.4.1.3" />
+    <PackageReference Include="Silk.NET.Vulkan" Version="2.15.0" />
+    <PackageReference Include="Silk.NET.Vulkan.Extensions.EXT" Version="2.15.0" />
+    <PackageReference Include="Silk.NET.Vulkan.Extensions.KHR" Version="2.15.0" />
     <PackageReference Include="StbImageSharp" Version="2.27.8" />
   </ItemGroup>
 

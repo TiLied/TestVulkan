@@ -252,6 +252,20 @@ namespace TestVulkan
 			configInfo.AttributeDescriptions = VertexT.GetAttributeDescriptions();
 		}
 
+		static public void EnableAlphaBlending(ref PipelineConfigInfo configInfo) 
+		{
+
+			configInfo.ColorBlendAttachment.colorWriteMask = VkColorComponentFlags.VK_COLOR_COMPONENT_R_BIT | VkColorComponentFlags.VK_COLOR_COMPONENT_G_BIT | VkColorComponentFlags.VK_COLOR_COMPONENT_B_BIT | VkColorComponentFlags.VK_COLOR_COMPONENT_A_BIT;
+			configInfo.ColorBlendAttachment.blendEnable = true;
+			configInfo.ColorBlendAttachment.srcColorBlendFactor = VkBlendFactor.VK_BLEND_FACTOR_SRC_ALPHA;
+			configInfo.ColorBlendAttachment.dstColorBlendFactor = VkBlendFactor.VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+			configInfo.ColorBlendAttachment.colorBlendOp = VkBlendOp.VK_BLEND_OP_ADD;
+			configInfo.ColorBlendAttachment.srcAlphaBlendFactor = VkBlendFactor.VK_BLEND_FACTOR_ONE;
+			configInfo.ColorBlendAttachment.dstAlphaBlendFactor = VkBlendFactor.VK_BLEND_FACTOR_ZERO;
+			configInfo.ColorBlendAttachment.alphaBlendOp = VkBlendOp.VK_BLEND_OP_ADD;
+
+		}
+
 		public void Bind(VkCommandBuffer commandBuffer) 
 		{
 			VulkanNative.vkCmdBindPipeline(commandBuffer, VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_GRAPHICS, GraphicsPipeline);
